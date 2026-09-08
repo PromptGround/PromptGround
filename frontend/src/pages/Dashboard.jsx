@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Zap, 
-  Activity, 
-  Layers, 
-  GitPullRequest, 
-  Key, 
-  Server, 
-  Terminal, 
-  Copy, 
-  Check, 
-  ArrowRight 
+import {
+  Zap,
+  Activity,
+  Layers,
+  GitPullRequest,
+  Key,
+  Server,
+  Terminal,
+  Copy,
+  Check,
+  ArrowRight
 } from 'lucide-react';
 import { api } from '../utils/api';
 import EnvironmentBadge from '../components/EnvironmentBadge';
@@ -77,61 +77,6 @@ export default function Dashboard({ onNavigate }) {
           <button className="btn btn-primary btn-sm" onClick={() => onNavigate('prompts')}>
             <Layers size={15} /> View Registry
           </button>
-        </div>
-      </div>
-
-      {/* Primary KPI Grid */}
-      <div className="stat-grid">
-        <div className="stat-card">
-          <div className="stat-label">
-            <span>Avg Cache Latency</span>
-            <Zap size={16} style={{ color: '#38bdf8' }} />
-          </div>
-          <div className="stat-value" style={{ color: '#38bdf8' }}>
-            {cache.averageLatencyMicroseconds ? `${cache.averageLatencyMicroseconds} µs` : '< 0.5 ms'}
-          </div>
-          <div className="stat-sub">
-            <span style={{ color: '#34d399', fontWeight: 600 }}>Sub-millisecond</span> without disk I/O
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-label">
-            <span>Cache Hit Ratio</span>
-            <Activity size={16} style={{ color: '#10b981' }} />
-          </div>
-          <div className="stat-value" style={{ color: '#34d399' }}>
-            {cache.hitRatePercentage !== undefined ? `${cache.hitRatePercentage}%` : '100%'}
-          </div>
-          <div className="stat-sub">
-            {cache.hits || 0} hits &bull; {cache.misses || 0} misses
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-label">
-            <span>Active Prompts Cached</span>
-            <Layers size={16} style={{ color: '#818cf8' }} />
-          </div>
-          <div className="stat-value" style={{ color: '#818cf8' }}>
-            {cache.cachedPromptsCount || counts.prompts || 0}
-          </div>
-          <div className="stat-sub">
-            Across dev, staging & production
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-label">
-            <span>Pending Promotion PRs</span>
-            <GitPullRequest size={16} style={{ color: '#fbbf24' }} />
-          </div>
-          <div className="stat-value" style={{ color: '#fbbf24' }}>
-            {counts.openPRs || 0}
-          </div>
-          <div className="stat-sub">
-            Awaiting peer review & merge
-          </div>
         </div>
       </div>
 
@@ -273,7 +218,7 @@ export default function Dashboard({ onNavigate }) {
                     <td style={{ fontSize: '0.84rem' }}>{pr.author_name}</td>
                     <td style={{ fontSize: '0.84rem' }}>{pr.assignee_name}</td>
                     <td style={{ textAlign: 'right' }}>
-                      <button 
+                      <button
                         className="btn btn-primary btn-sm"
                         onClick={() => onNavigate('prs', { prId: pr.id })}
                       >
