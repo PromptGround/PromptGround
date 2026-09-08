@@ -106,7 +106,23 @@ flowchart TD
 
 ## Quick Start & Installation
 
-### Option A: Docker Compose (Recommended)
+### Option A: Quick Run with Pre-Built Docker Image (Easiest)
+
+Run the pre-built public container directly without cloning or building:
+
+```bash
+docker run -d \
+  --name promptground \
+  -p 8080:8080 \
+  -v promptground_data:/data \
+  ghcr.io/promptground/promptground:latest
+```
+
+*Access the dashboard at `http://localhost:8080` (Default credentials: `admin` / `admin123`).*
+
+---
+
+### Option B: Docker Compose (Self-Hosted Stack)
 
 1. Clone the repository:
    ```bash
@@ -132,7 +148,7 @@ flowchart TD
 
 ---
 
-### Option B: Local Node.js Development
+### Option C: Local Node.js Development
 
 **Prerequisites**: Node.js v20+ and npm.
 

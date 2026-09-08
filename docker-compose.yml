@@ -1,10 +1,10 @@
 version: '3.8'
 
 services:
-  prompt-registry:
+  promptground:
     build: .
-    image: prompt-registry:self-hosted
-    container_name: prompt-registry
+    image: ghcr.io/promptground/promptground:latest
+    container_name: promptground
     restart: unless-stopped
     ports:
       - "${PORT:-8080}:8080"
