@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-green.svg)
 ![SQLite](https://img.shields.io/badge/storage-SQLite%20WAL-orange.svg)
 ![Architecture](https://img.shields.io/badge/architecture-Monolith%20%7C%20Single%20Container-purple.svg)
@@ -434,4 +434,4 @@ node tests/test_engine.js
 
 ## License
 
-PromptHub is licensed under the [MIT License](LICENSE).
+PromptHub is licensed under the [Apache License 2.0](LICENSE).
