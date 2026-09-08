@@ -108,7 +108,7 @@ flowchart TD
 
 ### Option A: Quick Run with Pre-Built Docker Image (Easiest)
 
-Run the pre-built public container directly without cloning or building:
+Run the pre-built public container directly with default credentials:
 
 ```bash
 docker run -d \
@@ -118,7 +118,21 @@ docker run -d \
   ghcr.io/promptground/promptground:latest
 ```
 
-*Access the dashboard at `http://localhost:8080` (Default credentials: `admin` / `admin123`).*
+#### Custom Admin Username & Password:
+Pass `-e ADMIN_USERNAME` and `-e ADMIN_PASSWORD` to configure your own administrator account when launching the container:
+
+```bash
+docker run -d \
+  --name promptground \
+  -p 8080:8080 \
+  -e ADMIN_USERNAME=myadmin \
+  -e ADMIN_PASSWORD=my_secure_password_987 \
+  -e JWT_SECRET=optional_custom_jwt_secret_key \
+  -v promptground_data:/data \
+  ghcr.io/promptground/promptground:latest
+```
+
+*Access the dashboard at `http://localhost:8080` (Username: `myadmin` / Password: `my_secure_password_987`).*
 
 ---
 
@@ -134,17 +148,34 @@ docker run -d \
    ```bash
    cp .env.example .env
    ```
-   *You can customize `ADMIN_USERNAME` and `ADMIN_PASSWORD` in `.env` or `docker-compose.yml`.*
+   *Edit `.env` to supply your desired `ADMIN_USERNAME` and `ADMIN_PASSWORD`:*
+   ```dotenv
+   ADMIN_USERNAME=devops_lead
+   ADMIN_PASSWORD=strong_production_password_2026
+   ```
 
 3. Start the engine:
    ```bash
-   docker compose up -d --build
+   docker compose up -d
    ```
 
 4. Open the dashboard:
    * **URL**: [http://localhost:8080](http://localhost:8080)
-   * **Default Username**: `admin`
-   * **Default Password**: `admin123` *(or your configured `ADMIN_PASSWORD`)*
+   * **Login**: With your configured `ADMIN_USERNAME` and `ADMIN_PASSWORD` (defaults to `admin` / `admin123` if omitted).
+
+---
+
+### Environment Variables Reference
+
+| Variable | Default Value | Description |
+| :--- | :--- | :--- |
+| `ADMIN_USERNAME` | `admin` | Administrator username configured at first boot or synchronized from environment. |
+| `ADMIN_PASSWORD` | `admin123` | Administrator password configured at first boot or updated when set in environment. |
+| `PORT` | `8080` | Port on which the monolithic backend & embedded frontend serve requests. |
+| `DATABASE_PATH` | `/data/prompts.db` | Persistent SQLite file path (map to a persistent Docker volume). |
+| `JWT_SECRET` | `(auto-generated)` | Secret signing key for session authentication JWT tokens. |
+| `SEED_SAMPLE_MODELS` | `false` | When set to `true`, seeds sample model configurations for local testing. |
+
 
 ---
 

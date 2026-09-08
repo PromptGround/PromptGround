@@ -36,15 +36,26 @@ function hashApiKey(key) {
 }
 
 function syncAdminCredentials() {
+  if (!process.env.ADMIN_USERNAME && !process.env.ADMIN_PASSWORD) {
+    return;
+  }
   const adminUsername = process.env.ADMIN_USERNAME || 'admin';
-  const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
-  const newHash = bcrypt.hashSync(adminPassword, 10);
+  const adminPassword = process.env.ADMIN_PASSWORD;
 
   const existingAdmin = db.prepare("SELECT * FROM users WHERE username = ? OR role = 'admin' LIMIT 1").get(adminUsername);
   if (existingAdmin) {
-    db.prepare("UPDATE users SET username = ?, password_hash = ?, role = 'admin' WHERE id = ?").run(adminUsername, newHash, existingAdmin.id);
+    if (adminPassword) {
+      const newHash = bcrypt.hashSync(adminPassword, 10);
+      db.prepare("UPDATE users SET username = ?, password_hash = ?, role = 'admin' WHERE id = ?").run(adminUsername, newHash, existingAdmin.id);
+      console.log(`[DB] Admin credentials synchronized from environment variables (username: ${adminUsername})`);
+    } else {
+      db.prepare("UPDATE users SET username = ? WHERE id = ?").run(adminUsername, existingAdmin.id);
+      console.log(`[DB] Admin username updated from environment variable (username: ${adminUsername})`);
+    }
   } else {
     const adminId = 'usr_' + uuidv4().slice(0, 8);
+    const pwd = adminPassword || 'admin123';
+    const newHash = bcrypt.hashSync(pwd, 10);
     db.prepare(`
       INSERT INTO users (id, username, password_hash, role, created_at)
       VALUES (?, ?, ?, 'admin', datetime('now'))
@@ -56,6 +67,7 @@ function syncAdminCredentials() {
         VALUES (?, ?)
       `).run(adminId, env);
     });
+    console.log(`[DB] Created new admin user from environment variables (username: ${adminUsername})`);
   }
 }
 

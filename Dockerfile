@@ -24,5 +24,7 @@ EXPOSE 8080
 ENV PORT=8080
 ENV DATABASE_PATH=/data/prompts.db
 ENV NODE_ENV=production
+ENV ADMIN_USERNAME=admin
+ENV ADMIN_PASSWORD=admin123
 
 CMD ["node", "server.js"]
