@@ -1,0 +1,16 @@
+**/node_modules
+node_modules
+backend/node_modules
+frontend/node_modules
+frontend/dist
+backend/public
+data/
+*.db
+*.db-wal
+*.db-shm
+.git
+.env
+.env.*
+.DS_Store
+*.log
+tests/
