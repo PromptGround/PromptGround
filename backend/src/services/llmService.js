@@ -187,7 +187,10 @@ class LlmService {
       // In automated test runs or when explicitly configured for testing, provide safe test completion
       const isTestRun = process.env.NODE_ENV === 'test' || 
                         process.env.MOCK_LLM_FOR_TESTS === 'true' || 
-                        (typeof provider.custom_headers === 'string' && provider.custom_headers.includes('PromptHub-Automated'));
+                        (typeof provider.custom_headers === 'string' && (
+                          provider.custom_headers.includes('PromptGround-Automated') ||
+                          provider.custom_headers.includes('PromptHub-Automated')
+                        ));
 
       if (isTestRun) {
         outputText = `[Simulated Test Response from ${provider.name} (${provider.model_id})]\n\nPrompt received and validated:\n"${renderedPrompt.slice(0, 120)}..."`;

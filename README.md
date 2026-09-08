@@ -1,4 +1,4 @@
-# PromptHub — Enterprise Prompt Registry & LLMOps Engine
+# PromptGround — Enterprise Prompt Registry & LLMOps Engine
 
 <div align="center">
 
@@ -19,14 +19,14 @@ Features sub-millisecond in-memory prompt template retrieval, GitOps-style Promo
 
 ## Architecture Overview
 
-PromptHub is architected for extreme speed, strict governance, and zero operational overhead:
+PromptGround is architected for extreme speed, strict governance, and zero operational overhead:
 
 ```mermaid
 flowchart TD
     Client[External Microservices / LLM Apps] -->|Bearer Scoped API Key| RuntimeAPI["High-Throughput Runtime API (/api/v1/runtime/)"]
     UserBrowser[Developer / Ops Browser] -->|JWT Session Cookie/Header| DashboardAPI["Management API & Embedded SPA UI"]
     
-    subgraph Monolith ["PromptHub Single-Container Monolith (Port 8080)"]
+    subgraph Monolith ["PromptGround Single-Container Monolith (Port 8080)"]
         RuntimeAPI --> MemoryCache["In-Memory Map Cache\n(~20µs - 50µs Latency | Zero Disk I/O)"]
         DashboardAPI --> MemoryCache
         DashboardAPI --> SQLiteEngine[("SQLite Engine\nWAL Mode (Write-Ahead Logging)\nPersistent Docker Volume")]
@@ -175,7 +175,7 @@ flowchart TD
    User Inquiry: {{inquiry_text}}
    Respond politely and address their issue step-by-step.
    ```
-3. PromptHub automatically parses and indexes all template variables.
+3. PromptGround automatically parses and indexes all template variables.
 
 ### 2. Testing in the Live Playground
 1. Open any prompt in the registry and navigate to the **Test Playground** tab.
@@ -215,7 +215,7 @@ flowchart TD
 
 ## Runtime API Reference
 
-PromptHub provides clean, ultra-low-latency runtime endpoints for production microservices:
+PromptGround provides clean, ultra-low-latency runtime endpoints for production microservices:
 
 ### 1. Fetch Active Prompt Template
 ```http
@@ -297,7 +297,7 @@ GET /api/v1/health
 
 ## Database Schema
 
-PromptHub uses 9 relational SQLite tables with foreign keys and indexes:
+PromptGround uses 9 relational SQLite tables with foreign keys and indexes:
 
 ```sql
 -- Users and authentication
@@ -408,7 +408,7 @@ CREATE TABLE system_settings (
 
 ## Testing & Quality Assurance
 
-PromptHub includes a comprehensive integration test suite verifying end-to-end functionality:
+PromptGround includes a comprehensive integration test suite verifying end-to-end functionality:
 
 ```bash
 # Run tests against the active engine
@@ -434,4 +434,4 @@ node tests/test_engine.js
 
 ## License
 
-PromptHub is licensed under the [Apache License 2.0](LICENSE).
+PromptGround is licensed under the [Apache License 2.0](LICENSE).

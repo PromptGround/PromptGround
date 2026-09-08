@@ -2,7 +2,7 @@ const assert = require('assert');
 
 async function runVerificationSuite() {
   console.log('===============================================================');
-  console.log('🧪 Starting PromptHub Self-Hosted Engine Integration Test Suite');
+  console.log('🧪 Starting PromptGround Self-Hosted Engine Integration Test Suite');
   console.log('===============================================================\n');
 
   const BASE_URL = 'http://localhost:8080';
@@ -38,7 +38,7 @@ async function runVerificationSuite() {
     const res = await fetch(`${BASE_URL}/`);
     assert.strictEqual(res.status, 200);
     const html = await res.text();
-    assert(html.includes('PromptHub') || html.includes('root'), 'Should serve React SPA HTML');
+    assert(html.includes('PromptGround') || html.includes('root'), 'Should serve React SPA HTML');
   });
 
   // 2. High-Throughput Sub-Millisecond Runtime Fetch
@@ -241,7 +241,7 @@ async function runVerificationSuite() {
         provider_type: 'ollama',
         base_url: 'http://localhost:11434',
         model_id: 'llama3.2:1b',
-        custom_headers: { 'X-Test-Suite': 'PromptHub-Automated' },
+        custom_headers: { 'X-Test-Suite': 'PromptGround-Automated' },
         default_params: { temperature: 0.1 }
       })
     });

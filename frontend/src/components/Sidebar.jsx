@@ -54,7 +54,7 @@ export default function Sidebar({
         </div>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <span style={{ fontSize: '1.05rem', fontWeight: 800, letterSpacing: '-0.03em', color: '#fff' }}>
-            PromptHub
+            PromptGround
           </span>
           <span style={{ fontSize: '0.62rem', color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '-2px' }}>
             LLMOps Engine

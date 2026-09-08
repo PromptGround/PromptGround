@@ -1,5 +1,5 @@
-const TOKEN_KEY = 'prompthub_jwt_token';
-const USER_KEY = 'prompthub_user_profile';
+const TOKEN_KEY = 'promptground_jwt_token';
+const USER_KEY = 'promptground_user_profile';
 
 export function getStoredAuth() {
   const token = localStorage.getItem(TOKEN_KEY);

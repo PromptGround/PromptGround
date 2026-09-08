@@ -99,7 +99,7 @@ function seedSmtpSettings() {
   insertSetting.run('smtp_user', process.env.SMTP_USER || '');
   insertSetting.run('smtp_pass', process.env.SMTP_PASS || '');
   insertSetting.run('smtp_from_email', process.env.SMTP_FROM_EMAIL || '');
-  insertSetting.run('smtp_from_name', process.env.SMTP_FROM_NAME || 'PromptHub Notifications');
+  insertSetting.run('smtp_from_name', process.env.SMTP_FROM_NAME || 'PromptGround Notifications');
 }
 
 function seedInitialData() {
@@ -297,7 +297,7 @@ Provide a {{max_length}} word executive summary with bullet-pointed citations.`;
   insertSetting.run('wal_checkpoint_mode', 'PASSIVE');
   insertSetting.run('runtime_telemetry', 'enabled');
   insertSetting.run('default_cache_ttl_seconds', '3600');
-  insertSetting.run('company_name', 'PromptHub LLMOps');
+  insertSetting.run('company_name', 'PromptGround LLMOps');
 
   console.log('[DB] Database successfully initialized and seeded.');
   console.log('[DB] Default credentials:');

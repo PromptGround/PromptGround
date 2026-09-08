@@ -599,7 +599,7 @@ export default function Settings({ currentUser }) {
                 required
                 value={smtpConfig.fromEmail || ''}
                 onChange={(e) => setSmtpConfig({ ...smtpConfig, fromEmail: e.target.value })}
-                placeholder="alerts@prompthub.internal"
+                placeholder="alerts@promptground.internal"
               />
             </div>
 
@@ -610,7 +610,7 @@ export default function Settings({ currentUser }) {
                 className="form-input"
                 value={smtpConfig.fromName || ''}
                 onChange={(e) => setSmtpConfig({ ...smtpConfig, fromName: e.target.value })}
-                placeholder="PromptHub Notifications"
+                placeholder="PromptGround Notifications"
               />
             </div>
           </div>

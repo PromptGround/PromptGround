@@ -1,5 +1,5 @@
 {
-  "name": "prompthub",
+  "name": "promptground",
   "version": "1.0.0",
   "description": "Prompt Registry & LLMOps Engine (Self-Hosted Architecture)",
   "scripts": {

@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken');
 const promptCache = require('../cache/promptCache');
 const { db } = require('../db');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'prompthub_super_secret_jwt_key_98765';
+const JWT_SECRET = process.env.JWT_SECRET || 'promptground_super_secret_jwt_key_98765';
 
 function generateUserToken(user) {
   return jwt.sign(

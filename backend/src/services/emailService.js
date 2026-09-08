@@ -14,8 +14,8 @@ class EmailService {
       secure: false,
       user: '',
       pass: '',
-      fromEmail: 'notifications@prompthub.internal',
-      fromName: 'PromptHub LLMOps'
+      fromEmail: 'notifications@promptground.internal',
+      fromName: 'PromptGround LLMOps'
     };
 
     rows.forEach(r => {
@@ -70,13 +70,13 @@ class EmailService {
       const info = await transporter.sendMail({
         from: `"${config.fromName}" <${config.fromEmail}>`,
         to: toEmail,
-        subject: 'PromptHub SMTP Test Notification',
-        text: 'This is a test notification confirming that PromptHub SMTP email dispatch is working correctly.',
+        subject: 'PromptGround SMTP Test Notification',
+        text: 'This is a test notification confirming that PromptGround SMTP email dispatch is working correctly.',
         html: `
           <div style="font-family: sans-serif; padding: 20px; background: #0f121d; color: #f8fafc; border-radius: 8px;">
-            <h2 style="color: #6366f1;">PromptHub Email Notification Test</h2>
+            <h2 style="color: #6366f1;">PromptGround Email Notification Test</h2>
             <p>Your SMTP integration has been verified successfully.</p>
-            <p style="color: #94a3b8; font-size: 0.85rem;">Sent from PromptHub LLMOps Engine via ${config.host}:${config.port}</p>
+            <p style="color: #94a3b8; font-size: 0.85rem;">Sent from PromptGround LLMOps Engine via ${config.host}:${config.port}</p>
           </div>
         `
       });

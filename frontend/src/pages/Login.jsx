@@ -57,7 +57,7 @@ export default function Login({ onLoginSuccess }) {
             <Sparkles size={24} color="#fff" />
           </div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.03em', color: '#fff' }}>
-            PromptHub
+            PromptGround
           </h1>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
             Enterprise Prompt Registry & LLMOps Engine
@@ -121,7 +121,7 @@ export default function Login({ onLoginSuccess }) {
         <div style={{ marginTop: '28px', paddingTop: '20px', borderTop: '1px solid var(--border-subtle)', textAlign: 'center' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
             <ShieldCheck size={14} style={{ color: '#10b981' }} />
-            <span>PromptHub Self-Hosted Identity Gateway</span>
+            <span>PromptGround Self-Hosted Identity Gateway</span>
           </div>
         </div>
       </div>
