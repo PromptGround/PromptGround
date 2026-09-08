@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  prompt-registry:
+    build: .
+    image: prompt-registry:self-hosted
+    container_name: prompt-registry
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      - PORT=8080
+      - DATABASE_PATH=/data/prompts.db
+      - JWT_SECRET=${JWT_SECRET:-change_this_to_a_secure_random_string}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+    volumes:
+      - registry_data:/data
+
+volumes:
+  registry_data:

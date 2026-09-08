@@ -1,0 +1,22 @@
+{
+  "name": "prompthub",
+  "version": "1.0.0",
+  "description": "Prompt Registry & LLMOps Engine (Self-Hosted Architecture)",
+  "scripts": {
+    "start": "cd backend && node server.js",
+    "build:frontend": "cd frontend && npm run build && cp -r dist ../backend/public",
+    "build": "npm run build:frontend",
+    "test": "node tests/test_engine.js",
+    "docker:build": "docker build -t prompt-registry:self-hosted .",
+    "docker:up": "docker-compose up -d"
+  },
+  "keywords": [
+    "prompt-registry",
+    "llmops",
+    "prompts",
+    "sqlite-wal",
+    "sub-millisecond-cache"
+  ],
+  "author": "",
+  "license": "MIT"
+}
