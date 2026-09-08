@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS prompt_pull_requests (
     source_version_id TEXT NOT NULL,
     target_environment TEXT CHECK(target_environment IN ('staging', 'production')) NOT NULL,
     author_id TEXT NOT NULL,
-    assignee_id TEXT NOT NULL,
+    assignee_id TEXT,
     status TEXT CHECK(status IN ('open', 'merged', 'rejected')) DEFAULT 'open',
     title TEXT NOT NULL,
     description TEXT,

@@ -70,7 +70,20 @@ export const api = {
   revokeApiKey: (id) => apiRequest(`/api-keys/${id}`, { method: 'DELETE' }),
 
   // Users & Access Control
-  getUsers: () => apiRequest('/users'),
+  getUsers: (params) => {
+    let url = '/users';
+    if (typeof params === 'string') {
+      url += `?promptId=${encodeURIComponent(params)}`;
+    } else if (params && typeof params === 'object') {
+      const q = new URLSearchParams();
+      if (params.promptId) q.append('promptId', params.promptId);
+      if (params.slug) q.append('slug', params.slug);
+      if (params.targetEnvironment) q.append('targetEnvironment', params.targetEnvironment);
+      const qs = q.toString();
+      if (qs) url += `?${qs}`;
+    }
+    return apiRequest(url);
+  },
   createUser: (payload) => apiRequest('/users', { method: 'POST', body: JSON.stringify(payload) }),
   updateUserRole: (id, role) => apiRequest(`/users/${id}/role`, { method: 'PUT', body: JSON.stringify({ role }) }),
   updateUserEnvironments: (id, environments) => apiRequest(`/users/${id}/environments`, { method: 'PUT', body: JSON.stringify({ environments }) }),

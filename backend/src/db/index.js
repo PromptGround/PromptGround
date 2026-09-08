@@ -28,6 +28,40 @@ function initDatabase() {
   const schema = fs.readFileSync(schemaPath, 'utf8');
   db.exec(schema);
 
+  // Migration: ensure assignee_id is nullable for collaborative peer review (like GitHub)
+  try {
+    const prCols = db.prepare("PRAGMA table_info(prompt_pull_requests)").all();
+    const assigneeCol = prCols.find(c => c.name === 'assignee_id');
+    if (assigneeCol && assigneeCol.notnull === 1) {
+      db.pragma('foreign_keys = OFF');
+      db.exec(`
+        CREATE TABLE prompt_pull_requests_new (
+          id TEXT PRIMARY KEY,
+          prompt_id TEXT NOT NULL,
+          source_version_id TEXT NOT NULL,
+          target_environment TEXT CHECK(target_environment IN ('staging', 'production')) NOT NULL,
+          author_id TEXT NOT NULL,
+          assignee_id TEXT,
+          status TEXT CHECK(status IN ('open', 'merged', 'rejected')) DEFAULT 'open',
+          title TEXT NOT NULL,
+          description TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (prompt_id) REFERENCES prompts(id),
+          FOREIGN KEY (source_version_id) REFERENCES prompt_versions(id),
+          FOREIGN KEY (author_id) REFERENCES users(id),
+          FOREIGN KEY (assignee_id) REFERENCES users(id)
+        );
+        INSERT INTO prompt_pull_requests_new SELECT * FROM prompt_pull_requests;
+        DROP TABLE prompt_pull_requests;
+        ALTER TABLE prompt_pull_requests_new RENAME TO prompt_pull_requests;
+        CREATE INDEX IF NOT EXISTS idx_pull_requests_status ON prompt_pull_requests(status);
+      `);
+      db.pragma('foreign_keys = ON');
+    }
+  } catch (e) {
+    // Schema already current or table not initialized yet
+  }
+
   seedInitialData();
 }
 

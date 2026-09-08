@@ -10,7 +10,49 @@ router.use(authenticateUser);
 
 // GET /api/v1/users - List users with roles, environment access, and prompt permissions
 router.get('/', (req, res) => {
-  // Non-admins only get minimal information for pull request assignee selection
+  const { promptId, slug, targetEnvironment } = req.query;
+  const targetPromptIdOrSlug = promptId || slug;
+
+  // When querying for eligible reviewers/mergers for a specific prompt and environment
+  if (targetPromptIdOrSlug) {
+    const prompt = db.prepare('SELECT id, created_by FROM prompts WHERE id = ? OR slug = ?').get(targetPromptIdOrSlug, targetPromptIdOrSlug);
+    if (!prompt) {
+      return res.status(404).json({ error: 'Prompt not found' });
+    }
+
+    if (targetEnvironment) {
+      // Return users who have edit access to this prompt AND access to targetEnvironment (or are admins)
+      const eligibleUsers = db.prepare(`
+        SELECT DISTINCT u.id, u.username, u.role
+        FROM users u
+        LEFT JOIN user_environment_access uea ON u.id = uea.user_id AND uea.environment = ?
+        LEFT JOIN user_prompt_access upa ON u.id = upa.user_id AND upa.prompt_id = ?
+        WHERE u.role = 'admin'
+           OR (
+             u.role = 'editor'
+             AND uea.environment IS NOT NULL
+             AND (u.id = ? OR upa.access_level IN ('write', 'admin'))
+           )
+        ORDER BY (u.role = 'admin') DESC, u.username ASC
+      `).all(targetEnvironment, prompt.id, prompt.created_by);
+
+      return res.json({ users: eligibleUsers });
+    }
+
+    const eligibleUsers = db.prepare(`
+      SELECT DISTINCT u.id, u.username, u.role
+      FROM users u
+      LEFT JOIN user_prompt_access upa ON u.id = upa.user_id AND upa.prompt_id = ?
+      WHERE u.role = 'admin'
+         OR u.id = ?
+         OR upa.prompt_id IS NOT NULL
+      ORDER BY (u.role = 'admin') DESC, u.username ASC
+    `).all(prompt.id, prompt.created_by);
+
+    return res.json({ users: eligibleUsers });
+  }
+
+  // Non-admins only get minimal information for general queries
   if (req.user.role !== 'admin') {
     const reviewers = db.prepare(`
       SELECT id, username, role

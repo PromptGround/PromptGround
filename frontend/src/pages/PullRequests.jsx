@@ -8,7 +8,8 @@ import {
   ArrowRight, 
   Layers, 
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  Users
 } from 'lucide-react';
 import { api } from '../utils/api';
 import EnvironmentBadge from '../components/EnvironmentBadge';
@@ -191,8 +192,25 @@ export default function PullRequests({ initialPRId, currentUser }) {
 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.74rem', color: 'var(--text-muted)' }}>
                       <span>Target: <EnvironmentBadge env={item.target_environment} size="sm" /></span>
-                      <span>by {item.author_name}</span>
+                      <span>
+                        by {item.author_name}
+                        {item.author_name === currentUser?.username && (
+                          <span style={{ marginLeft: '4px', fontSize: '0.68rem', color: '#818cf8', fontWeight: 600 }}>(You)</span>
+                        )}
+                      </span>
                     </div>
+
+                    {item.eligibleMergers && item.eligibleMergers.length > 0 && (
+                      <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <ShieldCheck size={12} style={{ color: '#10b981' }} />
+                          {item.eligibleMergers.length} can merge
+                        </span>
+                        {item.canMerge && (
+                          <span style={{ color: '#34d399', fontWeight: 600 }}>✓ You can merge</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -215,7 +233,7 @@ export default function PullRequests({ initialPRId, currentUser }) {
               {/* PR Header Card */}
               <div className="card">
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '20px', marginBottom: '16px' }}>
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
                       <span style={{ 
                         fontSize: '0.75rem', 
@@ -241,10 +259,15 @@ export default function PullRequests({ initialPRId, currentUser }) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <User size={14} /> Author: <strong style={{ color: 'var(--text-primary)' }}>{pr.author_name}</strong>
+                        {pr.author_name === currentUser?.username && (
+                          <span style={{ fontSize: '0.7rem', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>You</span>
+                        )}
                       </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <ShieldCheck size={14} /> Assignee: <strong style={{ color: 'var(--text-primary)' }}>{pr.assignee_name}</strong>
-                      </span>
+                      {pr.assignee_name && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <ShieldCheck size={14} /> Assignee: <strong style={{ color: 'var(--text-primary)' }}>{pr.assignee_name}</strong>
+                        </span>
+                      )}
                       <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Calendar size={14} /> {new Date(pr.created_at).toLocaleDateString()}
                       </span>
@@ -253,23 +276,79 @@ export default function PullRequests({ initialPRId, currentUser }) {
 
                   {/* Actions */}
                   {pr.status === 'open' && (
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        disabled={actionLoading}
-                        onClick={() => setIsRejectModalOpen(true)}
-                      >
-                        <X size={15} /> Reject
-                      </button>
-                      <button
-                        className="btn btn-success btn-sm"
-                        disabled={actionLoading}
-                        onClick={handleMerge}
-                      >
-                        <Check size={15} /> Merge & Promote
-                      </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        {(currentUser?.role === 'admin' || pr.author_name === currentUser?.username || selectedPR.canMerge) && (
+                          <button
+                            className="btn btn-danger btn-sm"
+                            disabled={actionLoading}
+                            onClick={() => setIsRejectModalOpen(true)}
+                          >
+                            <X size={15} /> {pr.author_name === currentUser?.username && !selectedPR.canMerge ? 'Close PR' : 'Reject'}
+                          </button>
+                        )}
+                        <button
+                          className="btn btn-success btn-sm"
+                          disabled={actionLoading || !selectedPR.canMerge}
+                          title={selectedPR.canMerge ? 'Merge & promote prompt template' : `Requires edit access to ${pr.prompt_name} and ${pr.target_environment} access to merge`}
+                          onClick={handleMerge}
+                        >
+                          <Check size={15} /> Merge & Promote
+                        </button>
+                      </div>
+                      {!selectedPR.canMerge && (
+                        <span style={{ fontSize: '0.7rem', color: '#f59e0b' }}>
+                          Requires edit access &amp; {pr.target_environment} access
+                        </span>
+                      )}
                     </div>
                   )}
+                </div>
+
+                {/* List of Users Who Have Access to Merge (Like GitHub) */}
+                <div style={{ 
+                  marginTop: '12px', 
+                  padding: '12px 16px', 
+                  background: 'var(--bg-elevated)', 
+                  borderRadius: 'var(--radius-md)', 
+                  border: '1px solid var(--border-subtle)' 
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                      <Users size={14} style={{ color: 'var(--accent-primary)' }} />
+                      Authorized to Merge ({selectedPR.eligibleMergers?.length || 0}):
+                    </span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                      Users with edit access to prompt &amp; {pr.target_environment} access
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {selectedPR.eligibleMergers && selectedPR.eligibleMergers.length > 0 ? (
+                      selectedPR.eligibleMergers.map(u => {
+                        const isMe = u.username === currentUser?.username;
+                        return (
+                          <span key={u.id} style={{ 
+                            display: 'inline-flex', 
+                            alignItems: 'center', 
+                            gap: '6px', 
+                            background: isMe ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255, 255, 255, 0.05)', 
+                            border: isMe ? '1px solid #6366f1' : '1px solid var(--border-subtle)',
+                            padding: '4px 10px', 
+                            borderRadius: '20px', 
+                            fontSize: '0.75rem',
+                            color: 'var(--text-primary)'
+                          }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></span>
+                            <strong>{u.username}</strong>
+                            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>({u.role})</span>
+                            {isMe && <span style={{ color: '#818cf8', fontSize: '0.68rem', fontWeight: 700 }}>★ (You)</span>}
+                          </span>
+                        );
+                      })
+                    ) : (
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Only administrators can merge.</span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Promotion Path Banner */}

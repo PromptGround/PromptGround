@@ -9,7 +9,8 @@ import {
   Terminal,
   Copy,
   Check,
-  ArrowRight
+  ArrowRight,
+  ShieldCheck
 } from 'lucide-react';
 import { api } from '../utils/api';
 import EnvironmentBadge from '../components/EnvironmentBadge';
@@ -191,7 +192,7 @@ export default function Dashboard({ onNavigate }) {
                   <th>Source Version</th>
                   <th>Target Env</th>
                   <th>Author</th>
-                  <th>Assignee</th>
+                  <th>Reviewers / Mergers</th>
                   <th style={{ textAlign: 'right' }}>Action</th>
                 </tr>
               </thead>
@@ -216,7 +217,16 @@ export default function Dashboard({ onNavigate }) {
                       <EnvironmentBadge env={pr.target_environment} size="sm" />
                     </td>
                     <td style={{ fontSize: '0.84rem' }}>{pr.author_name}</td>
-                    <td style={{ fontSize: '0.84rem' }}>{pr.assignee_name}</td>
+                    <td style={{ fontSize: '0.82rem' }}>
+                      {pr.eligibleMergers && pr.eligibleMergers.length > 0 ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--text-secondary)' }}>
+                          <ShieldCheck size={13} style={{ color: '#10b981' }} />
+                          {pr.eligibleMergers.length} can merge
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>Admin only</span>
+                      )}
+                    </td>
                     <td style={{ textAlign: 'right' }}>
                       <button
                         className="btn btn-primary btn-sm"

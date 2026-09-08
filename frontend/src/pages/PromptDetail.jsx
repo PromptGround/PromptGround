@@ -33,9 +33,8 @@ export default function PromptDetail({ slug, onBack, onNavigateToPR, currentUser
   const [prSubmitting, setPrSubmitting] = useState(false);
   const [prError, setPrError] = useState(null);
 
-  // Users for assignee list
-  const [usersList, setUsersList] = useState([]);
-  const [prAssigneeId, setPrAssigneeId] = useState('');
+  // Eligible mergers list (users with prompt edit access & target environment access)
+  const [eligibleMergers, setEligibleMergers] = useState([]);
 
   const [savingVersion, setSavingVersion] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState(null);
@@ -58,13 +57,15 @@ export default function PromptDetail({ slug, onBack, onNavigateToPR, currentUser
 
   useEffect(() => {
     fetchPromptDetails();
-    api.getUsers().then(u => {
-      const list = u.users || [];
-      setUsersList(list);
-      const admin = list.find(x => x.role === 'admin');
-      if (admin) setPrAssigneeId(admin.id);
-    }).catch(() => {});
   }, [slug]);
+
+  useEffect(() => {
+    if (slug) {
+      api.getUsers({ promptId: slug, targetEnvironment: prTargetEnv }).then(u => {
+        setEligibleMergers(u.users || []);
+      }).catch(() => {});
+    }
+  }, [slug, prTargetEnv]);
 
   const handleSaveVersion = async (versionPayload) => {
     setSavingVersion(true);
@@ -93,8 +94,7 @@ export default function PromptDetail({ slug, onBack, onNavigateToPR, currentUser
         source_version_id: prSourceVersionId,
         target_environment: prTargetEnv,
         title: prTitle,
-        description: prDesc,
-        assignee_id: prAssigneeId
+        description: prDesc
       });
 
       setIsPRModalOpen(false);
@@ -102,7 +102,7 @@ export default function PromptDetail({ slug, onBack, onNavigateToPR, currentUser
       setPrDesc('');
       onNavigateToPR(res.pullRequestId);
     } catch (err) {
-      setPrError(err.message || 'Failed to submit promotion pull request');
+      setPrError(err.message || 'Failed to create promotion pull request');
     } finally {
       setPrSubmitting(false);
     }
@@ -456,18 +456,27 @@ export default function PromptDetail({ slug, onBack, onNavigateToPR, currentUser
             </div>
 
             <div className="form-group">
-              <label className="form-label">Assignee / Reviewer</label>
-              <select
-                className="form-select"
-                value={prAssigneeId}
-                onChange={(e) => setPrAssigneeId(e.target.value)}
-              >
-                {usersList.map(u => (
-                  <option key={u.id} value={u.id}>
-                    {u.username} ({u.role})
-                  </option>
-                ))}
-              </select>
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>Eligible Reviewers & Mergers</span>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                  Users with edit access &amp; {prTargetEnv.toUpperCase()} access can merge
+                </span>
+              </label>
+              {eligibleMergers.length === 0 ? (
+                <div style={{ color: '#f59e0b', fontSize: '0.82rem', padding: '10px 14px', background: 'rgba(245, 158, 11, 0.1)', borderRadius: '6px', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+                  ⚠️ No non-admin reviewers currently have edit access to this prompt and the {prTargetEnv} environment. System administrators will be able to review &amp; merge this PR.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '10px 14px', background: 'var(--bg-elevated)', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                  {eligibleMergers.map(u => (
+                    <span key={u.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.06)', padding: '4px 10px', borderRadius: '16px', fontSize: '0.76rem', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></span>
+                      <strong>{u.username}</strong>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>({u.role})</span>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="form-group">

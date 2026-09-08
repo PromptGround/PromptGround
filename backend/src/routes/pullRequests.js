@@ -8,6 +8,47 @@ const { computeTextDiff, mergePromotionPullRequest } = require('../services/prom
 
 router.use(authenticateUser);
 
+// Helper: get list of users who have permission to review & merge a PR into targetEnvironment
+function getEligibleMergers(promptId, targetEnvironment) {
+  const prompt = db.prepare('SELECT id, created_by FROM prompts WHERE id = ? OR slug = ?').get(promptId, promptId);
+  if (!prompt) return [];
+
+  // Admins always have merge rights across all prompts and environments
+  // Editors have merge rights if:
+  // 1. They have write/admin access on the prompt (or created it)
+  // 2. They have access to the target environment
+  return db.prepare(`
+    SELECT DISTINCT u.id, u.username, u.role
+    FROM users u
+    LEFT JOIN user_environment_access uea ON u.id = uea.user_id AND uea.environment = ?
+    LEFT JOIN user_prompt_access upa ON u.id = upa.user_id AND upa.prompt_id = ?
+    WHERE u.role = 'admin'
+       OR (
+         u.role = 'editor'
+         AND uea.environment IS NOT NULL
+         AND (u.id = ? OR upa.access_level IN ('write', 'admin'))
+       )
+    ORDER BY (u.role = 'admin') DESC, u.username ASC
+  `).all(targetEnvironment, prompt.id, prompt.created_by);
+}
+
+// Helper: check if a specific user can merge a PR
+function canUserMergePR(user, pr) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (user.role !== 'editor') return false;
+
+  // 1. Must have environment access to target_environment
+  const hasEnvAccess = user.environments && user.environments.includes(pr.target_environment);
+  if (!hasEnvAccess) {
+    const envRow = db.prepare('SELECT 1 FROM user_environment_access WHERE user_id = ? AND environment = ?').get(user.id, pr.target_environment);
+    if (!envRow) return false;
+  }
+
+  // 2. Must have edit/write access to this prompt
+  return hasPromptAccess(user, pr.prompt_id, 'write');
+}
+
 // GET /api/v1/pull-requests - List pull requests
 router.get('/', (req, res) => {
   const { status, promptId } = req.query;
@@ -25,7 +66,7 @@ router.get('/', (req, res) => {
     JOIN prompts p ON pr.prompt_id = p.id
     JOIN prompt_versions pv ON pr.source_version_id = pv.id
     JOIN users author ON pr.author_id = author.id
-    JOIN users assignee ON pr.assignee_id = assignee.id
+    LEFT JOIN users assignee ON pr.assignee_id = assignee.id
     WHERE 1=1
   `;
 
@@ -35,15 +76,15 @@ router.get('/', (req, res) => {
     params.push(status);
   }
   if (promptId) {
-    query += ' AND pr.prompt_id = ?';
-    params.push(promptId);
+    query += ' AND (pr.prompt_id = ? OR p.slug = ?)';
+    params.push(promptId, promptId);
   }
 
   // Non-admins can only see PRs where they are author, assignee, or have prompt access
   if (req.user.role !== 'admin') {
     query += ` AND (
       pr.author_id = ? 
-      OR pr.assignee_id = ? 
+      OR (pr.assignee_id IS NOT NULL AND pr.assignee_id = ?)
       OR pr.prompt_id IN (SELECT prompt_id FROM user_prompt_access WHERE user_id = ?)
       OR p.created_by = ?
     )`;
@@ -52,7 +93,13 @@ router.get('/', (req, res) => {
 
   query += ' ORDER BY pr.created_at DESC';
 
-  const pullRequests = db.prepare(query).all(...params);
+  const rawPRs = db.prepare(query).all(...params);
+  const pullRequests = rawPRs.map(item => ({
+    ...item,
+    eligibleMergers: getEligibleMergers(item.prompt_id, item.target_environment),
+    canMerge: canUserMergePR(req.user, item)
+  }));
+
   res.json({ pullRequests });
 });
 
@@ -82,11 +129,19 @@ router.post('/', requireRole(['admin', 'editor']), (req, res) => {
     return res.status(400).json({ error: 'Invalid source_version_id for this prompt' });
   }
 
-  // Find a default assignee if none provided (e.g. first admin)
-  let finalAssigneeId = assignee_id;
-  if (!finalAssigneeId) {
-    const adminUser = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
-    finalAssigneeId = adminUser ? adminUser.id : req.user.id;
+  // Optional assignee
+  let finalAssigneeId = assignee_id || null;
+  if (finalAssigneeId) {
+    const assignee = db.prepare('SELECT id, username, role FROM users WHERE id = ?').get(finalAssigneeId);
+    if (!assignee) {
+      return res.status(400).json({ error: 'Assignee not found', message: 'The selected reviewer does not exist.' });
+    }
+    if (!hasPromptAccess(assignee, prompt_id, 'read')) {
+      return res.status(403).json({
+        error: 'Invalid Assignee',
+        message: `The selected reviewer '${assignee.username}' does not have access permissions to this prompt.`
+      });
+    }
   }
 
   const prId = 'pr_' + uuidv4().slice(0, 8);
@@ -106,13 +161,16 @@ router.post('/', requireRole(['admin', 'editor']), (req, res) => {
     description.trim()
   );
 
+  const eligibleMergers = getEligibleMergers(prompt_id, target_environment);
+
   res.status(201).json({
     message: 'Promotion pull request created successfully',
-    pullRequestId: prId
+    pullRequestId: prId,
+    eligibleMergers
   });
 });
 
-// GET /api/v1/pull-requests/:id - View PR details and side-by-side diff
+// GET /api/v1/pull-requests/:id - View PR details, diff, and eligible mergers
 router.get('/:id', (req, res) => {
   const { id } = req.params;
 
@@ -127,7 +185,7 @@ router.get('/:id', (req, res) => {
     FROM prompt_pull_requests pr
     JOIN prompts p ON pr.prompt_id = p.id
     JOIN users author ON pr.author_id = author.id
-    JOIN users assignee ON pr.assignee_id = assignee.id
+    LEFT JOIN users assignee ON pr.assignee_id = assignee.id
     WHERE pr.id = ?
   `).get(id);
 
@@ -135,10 +193,11 @@ router.get('/:id', (req, res) => {
     return res.status(404).json({ error: 'Pull request not found' });
   }
 
-  // Non-admins must have permission to view
+  // Non-admins must have permission to view:
+  // author, assignee, prompt read access, or admin
   const canView = req.user.role === 'admin' 
     || pr.author_id === req.user.id 
-    || pr.assignee_id === req.user.id 
+    || (pr.assignee_id && pr.assignee_id === req.user.id)
     || hasPromptAccess(req.user, pr.prompt_id, 'read');
 
   if (!canView) {
@@ -170,6 +229,8 @@ router.get('/:id', (req, res) => {
   const proposedContent = sourceVersion ? sourceVersion.template_content : '';
 
   const diff = computeTextDiff(originalContent, proposedContent);
+  const eligibleMergers = getEligibleMergers(pr.prompt_id, pr.target_environment);
+  const canMerge = canUserMergePR(req.user, pr);
 
   res.json({
     pullRequest: pr,
@@ -177,7 +238,9 @@ router.get('/:id', (req, res) => {
     targetCurrentVersion: targetCurrentVersion || null,
     diff,
     originalContent,
-    proposedContent
+    proposedContent,
+    eligibleMergers,
+    canMerge
   });
 });
 
@@ -194,34 +257,12 @@ router.post('/:id/merge', requireRole(['admin', 'editor']), (req, res) => {
     return res.status(400).json({ error: `Cannot merge PR with status '${pr.status}'` });
   }
 
-  // Enforce strict RBAC for non-admin editors
-  if (req.user.role !== 'admin') {
-    // 1. Must have environment access to target_environment
-    if (!req.user.environments || !req.user.environments.includes(pr.target_environment)) {
-      return res.status(403).json({
-        error: 'Target Environment Access Denied',
-        message: `You do not have authorization to deploy/merge into the '${pr.target_environment}' environment.`
-      });
-    }
-
-    // 2. Must have prompt admin permission OR (be designated assignee AND have prompt write permission)
-    const hasPromptAdmin = hasPromptAccess(req.user, pr.prompt_id, 'admin');
-    const isAssigneeWithWrite = pr.assignee_id === req.user.id && hasPromptAccess(req.user, pr.prompt_id, 'write');
-
-    if (!hasPromptAdmin && !isAssigneeWithWrite) {
-      return res.status(403).json({
-        error: 'Insufficient Prompt Permission',
-        message: 'Merging promotion requests requires prompt administrator privileges or being the designated reviewer.'
-      });
-    }
-
-    // 3. Separation of duties: author cannot approve/merge their own PR unless they are a prompt admin
-    if (pr.author_id === req.user.id && !hasPromptAdmin) {
-      return res.status(403).json({
-        error: 'Separation of Duties',
-        message: 'Authors cannot approve and merge their own pull requests without prompt administrator rights.'
-      });
-    }
+  // Enforce merge permissions: user must have prompt write/admin access and target environment access
+  if (!canUserMergePR(req.user, pr)) {
+    return res.status(403).json({
+      error: 'Insufficient Merge Permission',
+      message: `Merging promotion requests requires editor privileges with edit access to this prompt and access to the '${pr.target_environment}' environment.`
+    });
   }
 
   try {
@@ -235,7 +276,7 @@ router.post('/:id/merge', requireRole(['admin', 'editor']), (req, res) => {
   }
 });
 
-// POST /api/v1/pull-requests/:id/reject - Reject PR
+// POST /api/v1/pull-requests/:id/reject - Reject / Close PR
 router.post('/:id/reject', requireRole(['admin', 'editor']), (req, res) => {
   const { id } = req.params;
   const { rejectionReason = '' } = req.body;
@@ -249,16 +290,16 @@ router.post('/:id/reject', requireRole(['admin', 'editor']), (req, res) => {
     return res.status(400).json({ error: `Cannot reject PR with status '${pr.status}'` });
   }
 
-  // Enforce permissions for rejecting
-  if (req.user.role !== 'admin') {
-    const hasPromptAdmin = hasPromptAccess(req.user, pr.prompt_id, 'admin');
-    const isAssignee = pr.assignee_id === req.user.id;
-    if (!hasPromptAdmin && !isAssignee) {
-      return res.status(403).json({
-        error: 'Insufficient Permission',
-        message: 'Rejecting promotion requests requires prompt administrator privileges or being the designated reviewer.'
-      });
-    }
+  // Enforce permissions for rejecting: author, eligible merger, or admin
+  const canReject = req.user.role === 'admin'
+    || pr.author_id === req.user.id
+    || canUserMergePR(req.user, pr);
+
+  if (!canReject) {
+    return res.status(403).json({
+      error: 'Insufficient Permission',
+      message: 'Rejecting promotion requests requires being the PR author, having prompt edit & target environment access, or administrator rights.'
+    });
   }
 
   const updatedDescription = pr.description + (rejectionReason ? `\n\n[Rejection Note by ${req.user.username}]: ${rejectionReason}` : '');

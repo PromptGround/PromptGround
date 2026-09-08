@@ -114,18 +114,26 @@ router.get('/stats', (req, res) => {
     }
 
     const openPRs = db.prepare(`
-      SELECT COUNT(*) as count FROM prompt_pull_requests 
-      WHERE status = 'open' AND (
-        author_id = ? OR assignee_id = ? OR prompt_id IN (SELECT prompt_id FROM user_prompt_access WHERE user_id = ?)
+      SELECT COUNT(*) as count FROM prompt_pull_requests pr
+      JOIN prompts p ON pr.prompt_id = p.id
+      WHERE pr.status = 'open' AND (
+        pr.author_id = ? 
+        OR (pr.assignee_id IS NOT NULL AND pr.assignee_id = ?) 
+        OR pr.prompt_id IN (SELECT prompt_id FROM user_prompt_access WHERE user_id = ?)
+        OR p.created_by = ?
       )
-    `).get(req.user.id, req.user.id, req.user.id).count;
+    `).get(req.user.id, req.user.id, req.user.id, req.user.id).count;
 
     const totalPRs = db.prepare(`
-      SELECT COUNT(*) as count FROM prompt_pull_requests 
+      SELECT COUNT(*) as count FROM prompt_pull_requests pr
+      JOIN prompts p ON pr.prompt_id = p.id
       WHERE (
-        author_id = ? OR assignee_id = ? OR prompt_id IN (SELECT prompt_id FROM user_prompt_access WHERE user_id = ?)
+        pr.author_id = ? 
+        OR (pr.assignee_id IS NOT NULL AND pr.assignee_id = ?) 
+        OR pr.prompt_id IN (SELECT prompt_id FROM user_prompt_access WHERE user_id = ?)
+        OR p.created_by = ?
       )
-    `).get(req.user.id, req.user.id, req.user.id).count;
+    `).get(req.user.id, req.user.id, req.user.id, req.user.id).count;
 
     return res.json({
       cache: cacheStats,
