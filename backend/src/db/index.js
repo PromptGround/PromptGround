@@ -114,194 +114,47 @@ function seedSmtpSettings() {
   insertSetting.run('smtp_from_name', process.env.SMTP_FROM_NAME || 'PromptGround Notifications');
 }
 
-function seedInitialData() {
-  const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
-  if (userCount > 0) {
-    syncAdminCredentials();
-    seedSmtpSettings();
-    if (process.env.SEED_SAMPLE_MODELS === 'true') {
-      const adminUser = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
-      seedLlmProviders(adminUser ? adminUser.id : 'usr_admin');
+function purgeAllLegacySeedData() {
+  db.pragma('foreign_keys = OFF');
+  try {
+    const sampleSlugs = ['customer-support-copilot', 'sql-query-generator', 'rag-summarizer'];
+    for (const slug of sampleSlugs) {
+      const prompt = db.prepare('SELECT id FROM prompts WHERE slug = ?').get(slug);
+      if (prompt) {
+        db.prepare('DELETE FROM prompt_pull_requests WHERE prompt_id = ?').run(prompt.id);
+        db.prepare('DELETE FROM prompt_versions WHERE prompt_id = ?').run(prompt.id);
+        db.prepare('DELETE FROM user_prompt_access WHERE prompt_id = ?').run(prompt.id);
+        db.prepare('DELETE FROM prompts WHERE id = ?').run(prompt.id);
+      }
     }
-    return;
+    db.prepare("DELETE FROM user_environment_access WHERE user_id IN (SELECT id FROM users WHERE username IN ('sarah_eng', 'alex_analyst'))").run();
+    db.prepare("DELETE FROM users WHERE username IN ('sarah_eng', 'alex_analyst')").run();
+    db.prepare("DELETE FROM api_keys WHERE id IN ('key_prod_1', 'key_stg_1', 'key_dev_1')").run();
+  } finally {
+    db.pragma('foreign_keys = ON');
   }
+}
 
-  console.log('[DB] Seeding initial database records...');
+function logAdminCredentials(username, password) {
+  console.log('========================================================');
+  console.log('🔐 PromptGround Admin Credentials:');
+  console.log(`   Username: ${username}`);
+  console.log(`   Password: ${password}`);
+  if (process.env.ADMIN_USERNAME || process.env.ADMIN_PASSWORD) {
+    console.log('   Source:   Configured via Environment Variables');
+  } else {
+    console.log('   Source:   Default Credentials (set ADMIN_USERNAME & ADMIN_PASSWORD to customize)');
+  }
+  console.log('========================================================');
+}
 
+function seedInitialData() {
   const adminUsername = process.env.ADMIN_USERNAME || 'admin';
   const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
 
-  const insertUser = db.prepare(`
-    INSERT INTO users (id, username, password_hash, role, created_at)
-    VALUES (?, ?, ?, ?, datetime('now'))
-  `);
-
-  const insertEnvAccess = db.prepare(`
-    INSERT INTO user_environment_access (user_id, environment)
-    VALUES (?, ?)
-  `);
-
-  const adminId = 'usr_' + uuidv4().slice(0, 8);
-  const editorId = 'usr_' + uuidv4().slice(0, 8);
-  const viewerId = 'usr_' + uuidv4().slice(0, 8);
-
-  const adminHash = bcrypt.hashSync(adminPassword, 10);
-  const editorHash = bcrypt.hashSync('editor123', 10);
-  const viewerHash = bcrypt.hashSync('viewer123', 10);
-
-  insertUser.run(adminId, adminUsername, adminHash, 'admin');
-  insertUser.run(editorId, 'sarah_eng', editorHash, 'editor');
-  insertUser.run(viewerId, 'alex_analyst', viewerHash, 'viewer');
-
-  // Environment Access
-  ['development', 'staging', 'production'].forEach(env => insertEnvAccess.run(adminId, env));
-  ['development', 'staging'].forEach(env => insertEnvAccess.run(editorId, env));
-  ['development'].forEach(env => insertEnvAccess.run(viewerId, env));
-
-  // Prompts & Versions
-  const insertPrompt = db.prepare(`
-    INSERT INTO prompts (id, slug, name, description, created_by, created_at)
-    VALUES (?, ?, ?, ?, ?, datetime('now'))
-  `);
-
-  const insertVersion = db.prepare(`
-    INSERT INTO prompt_versions (id, prompt_id, version_number, template_content, variables, environment, changelog, created_by, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-  `);
-
-  // 1. Customer Support Copilot
-  const p1Id = 'prm_' + uuidv4().slice(0, 8);
-  insertPrompt.run(
-    p1Id,
-    'customer-support-copilot',
-    'Customer Support Copilot',
-    'High-empathy, context-aware AI assistant prompt for handling enterprise customer queries.',
-    adminId
-  );
-
-  const v1Content = `You are an expert customer support agent for Acme Cloud.
-Customer: {{customer_name}}
-Account Tier: {{account_tier}}
-Category: {{issue_category}}
-
-Recent history:
-{{conversation_history}}
-
-Guidelines:
-1. Provide a polite and direct answer.
-2. If account tier is Enterprise, offer dedicated VIP escalation.
-3. Keep response under 150 words.`;
-
-  const v2Content = `You are a world-class customer support specialist for Acme Cloud.
-Customer: {{customer_name}}
-Account Tier: {{account_tier}}
-Category: {{issue_category}}
-
-Recent conversation context:
-{{conversation_history}}
-
-Guidelines:
-1. Greet {{customer_name}} warmly and acknowledge their {{account_tier}} status.
-2. Provide step-by-step resolution steps.
-3. If {{account_tier}} is "Enterprise" or "Pro", include priority hotline info.
-4. Conclude with a helpful proactive follow-up question.`;
-
-  const v3Content = `You are a premium AI customer support copilot for Acme Cloud.
-Customer Name: {{customer_name}}
-Account Tier: {{account_tier}}
-Issue Category: {{issue_category}}
-
-Conversation History:
-{{conversation_history}}
-
-Strict Instructions:
-1. Tone: Empathetic, concise, professional.
-2. Address {{customer_name}} personally.
-3. Immediate resolution for {{issue_category}}.
-4. For Enterprise tiers: provide instant ticket escalation link.`;
-
-  const p1v1Id = 'ver_' + uuidv4().slice(0, 8);
-  const p1v2Id = 'ver_' + uuidv4().slice(0, 8);
-  const p1v3Id = 'ver_' + uuidv4().slice(0, 8);
-
-  insertVersion.run(p1v1Id, p1Id, 1, v1Content, JSON.stringify(['customer_name', 'account_tier', 'issue_category', 'conversation_history']), 'production', 'Initial production release', adminId);
-  insertVersion.run(p1v2Id, p1Id, 2, v2Content, JSON.stringify(['customer_name', 'account_tier', 'issue_category', 'conversation_history']), 'staging', 'Refined empathy & tier-based priority', editorId);
-  insertVersion.run(p1v3Id, p1Id, 3, v3Content, JSON.stringify(['customer_name', 'account_tier', 'issue_category', 'conversation_history']), 'development', 'Added strict ticket escalation links and tone constraints', editorId);
-
-  // 2. SQL Query Generator
-  const p2Id = 'prm_' + uuidv4().slice(0, 8);
-  insertPrompt.run(
-    p2Id,
-    'sql-query-generator',
-    'SQL Query Generator',
-    'Translates natural language questions into safe, optimized read-only SQL queries.',
-    editorId
-  );
-
-  const sqlV1Content = `You are a principal database engineer. Generate a syntax-valid {{dialect}} query based on this schema:
-{{schema_definition}}
-
-User Question: {{user_question}}
-
-Output strictly the SQL code block. No explanations. Only SELECT queries are permitted.`;
-
-  const p2v1Id = 'ver_' + uuidv4().slice(0, 8);
-  insertVersion.run(p2v1Id, p2Id, 1, sqlV1Content, JSON.stringify(['dialect', 'schema_definition', 'user_question']), 'production', 'Initial SQL generator release', editorId);
-
-  // 3. RAG Summarizer
-  const p3Id = 'prm_' + uuidv4().slice(0, 8);
-  insertPrompt.run(
-    p3Id,
-    'rag-summarizer',
-    'RAG Document Synthesizer',
-    'Synthesizes multi-document retrieval results into actionable executive briefings.',
-    adminId
-  );
-
-  const ragV1Content = `Synthesize the following documents to address the query:
-Query: {{user_query}}
-
-Source Documents:
-{{context_documents}}
-
-Provide a {{max_length}} word executive summary with bullet-pointed citations.`;
-
-  const p3v1Id = 'ver_' + uuidv4().slice(0, 8);
-  insertVersion.run(p3v1Id, p3Id, 1, ragV1Content, JSON.stringify(['user_query', 'context_documents', 'max_length']), 'staging', 'Initial RAG synthesizer for staging testing', adminId);
-
-  // Open Pull Request for customer-support-copilot v3 to staging
-  const prId = 'pr_' + uuidv4().slice(0, 8);
-  const insertPR = db.prepare(`
-    INSERT INTO prompt_pull_requests (id, prompt_id, source_version_id, target_environment, author_id, assignee_id, status, title, description, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, datetime('now'))
-  `);
-  insertPR.run(
-    prId,
-    p1Id,
-    p1v3Id,
-    'staging',
-    editorId,
-    adminId,
-    'Promote Customer Support v3 with strict tone constraints',
-    'Proposing v3 promotion from development to staging. Adds explicit escalation link formatting and tighter empathy rules.'
-  );
-
-  // API Keys (Seed known keys for microservice integration testing)
-  // dev key: ph_dev_testkey_12345
-  // stg key: ph_stg_testkey_67890
-  // prod key: ph_live_testkey_abcdef
-  const insertApiKey = db.prepare(`
-    INSERT INTO api_keys (id, key_hash, name, environment, created_by, created_at)
-    VALUES (?, ?, ?, ?, ?, datetime('now'))
-  `);
-
-  insertApiKey.run('key_prod_1', hashApiKey('ph_live_testkey_abcdef'), 'Production Service Key (Primary)', 'production', adminId);
-  insertApiKey.run('key_stg_1', hashApiKey('ph_stg_testkey_67890'), 'Staging CI/CD Runner', 'staging', editorId);
-  insertApiKey.run('key_dev_1', hashApiKey('ph_dev_testkey_12345'), 'Local Development Microservice', 'development', editorId);
-
-  // System Settings
+  // Ensure default system settings exist
   const insertSetting = db.prepare(`
-    INSERT INTO system_settings (key, value)
+    INSERT OR IGNORE INTO system_settings (key, value)
     VALUES (?, ?)
   `);
 
@@ -311,19 +164,42 @@ Provide a {{max_length}} word executive summary with bullet-pointed citations.`;
   insertSetting.run('default_cache_ttl_seconds', '3600');
   insertSetting.run('company_name', 'PromptGround LLMOps');
 
-  console.log('[DB] Database successfully initialized and seeded.');
-  console.log('[DB] Default credentials:');
-  console.log('     Admin:   username=admin,        password=admin123');
-  console.log('     Editor:  username=sarah_eng,    password=editor123');
-  console.log('     Viewer:  username=alex_analyst, password=viewer123');
-  console.log('[DB] Seed API Keys:');
-  console.log('     Production:  ph_live_testkey_abcdef');
-  console.log('     Staging:     ph_stg_testkey_67890');
-  console.log('     Development: ph_dev_testkey_12345');
+  seedSmtpSettings();
+
+  // Purge any legacy sample demo data that might exist in mounted volumes
+  purgeAllLegacySeedData();
+
+  const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
+  if (userCount > 0) {
+    syncAdminCredentials();
+    logAdminCredentials(adminUsername, adminPassword);
+    return;
+  }
+
+  console.log('[DB] Initializing fresh database with admin credentials...');
+
+  const adminId = 'usr_' + uuidv4().slice(0, 8);
+  const adminHash = bcrypt.hashSync(adminPassword, 10);
+
+  db.prepare(`
+    INSERT INTO users (id, username, password_hash, role, created_at)
+    VALUES (?, ?, ?, 'admin', datetime('now'))
+  `).run(adminId, adminUsername, adminHash);
+
+  // Admin has access to all environments
+  ['development', 'staging', 'production'].forEach(env => {
+    db.prepare(`
+      INSERT OR IGNORE INTO user_environment_access (user_id, environment)
+      VALUES (?, ?)
+    `).run(adminId, env);
+  });
+
+  logAdminCredentials(adminUsername, adminPassword);
 }
 
 module.exports = {
   db,
   initDatabase,
-  hashApiKey
+  hashApiKey,
+  purgeAllLegacySeedData
 };
