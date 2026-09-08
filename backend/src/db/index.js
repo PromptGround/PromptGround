@@ -60,6 +60,11 @@ function syncAdminCredentials() {
 }
 
 function seedLlmProviders(adminId) {
+  // Only seed sample demo models if explicitly requested via environment variable
+  if (process.env.SEED_SAMPLE_MODELS !== 'true') {
+    return;
+  }
+
   const count = db.prepare('SELECT COUNT(*) as count FROM llm_providers').get().count;
   if (count > 0) return;
 
@@ -71,61 +76,13 @@ function seedLlmProviders(adminId) {
 
   insertModel.run(
     'mod_ollama_local',
-    'Self-Hosted Ollama (Local/VPC)',
+    'Local Ollama Runner',
     'ollama',
-    'http://localhost:11434',
+    process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
     '',
     'llama3.2:latest',
     '{}',
     JSON.stringify({ temperature: 0.7, max_tokens: 1024 }),
-    adminId
-  );
-
-  insertModel.run(
-    'mod_vllm_openai',
-    'Self-Hosted vLLM / OpenAI Endpoint',
-    'openai',
-    'http://localhost:8000/v1',
-    'custom-local-token-xyz',
-    'meta-llama/Llama-3-8B-Instruct',
-    JSON.stringify({ "X-Cluster-Gateway": "vpc-internal" }),
-    JSON.stringify({ temperature: 0.2, max_tokens: 2048 }),
-    adminId
-  );
-
-  insertModel.run(
-    'mod_openai_gpt4o',
-    'OpenAI GPT-4o (Cloud API)',
-    'openai',
-    'https://api.openai.com/v1',
-    'sk-proj-demo-placeholder',
-    'gpt-4o',
-    '{}',
-    JSON.stringify({ temperature: 0.7, max_tokens: 2048 }),
-    adminId
-  );
-
-  insertModel.run(
-    'mod_anthropic_sonnet',
-    'Claude 3.5 Sonnet (Anthropic)',
-    'anthropic',
-    'https://api.anthropic.com/v1',
-    'sk-ant-demo-placeholder',
-    'claude-3-5-sonnet-20241022',
-    '{}',
-    JSON.stringify({ temperature: 0.5, max_tokens: 4096 }),
-    adminId
-  );
-
-  insertModel.run(
-    'mod_custom_rest',
-    'Enterprise Internal Inference Gateway',
-    'custom',
-    'https://ai-internal.acme.corp/v1/predict',
-    'bearer-corp-secret',
-    'custom-qwen-72b',
-    JSON.stringify({ "X-API-Tenant": "prompt-hub-enterprise", "X-Routing-Key": "cluster-east" }),
-    JSON.stringify({ temperature: 0.3 }),
     adminId
   );
 }
@@ -136,13 +93,13 @@ function seedSmtpSettings() {
     VALUES (?, ?)
   `);
 
-  insertSetting.run('smtp_host', 'smtp.sendgrid.net');
-  insertSetting.run('smtp_port', '587');
-  insertSetting.run('smtp_secure', 'false');
-  insertSetting.run('smtp_user', 'apikey');
-  insertSetting.run('smtp_pass', 'SG.demo_smtp_password_placeholder');
-  insertSetting.run('smtp_from_email', 'notifications@prompthub.internal');
-  insertSetting.run('smtp_from_name', 'PromptHub LLMOps');
+  insertSetting.run('smtp_host', process.env.SMTP_HOST || '');
+  insertSetting.run('smtp_port', process.env.SMTP_PORT || '587');
+  insertSetting.run('smtp_secure', process.env.SMTP_SECURE || 'false');
+  insertSetting.run('smtp_user', process.env.SMTP_USER || '');
+  insertSetting.run('smtp_pass', process.env.SMTP_PASS || '');
+  insertSetting.run('smtp_from_email', process.env.SMTP_FROM_EMAIL || '');
+  insertSetting.run('smtp_from_name', process.env.SMTP_FROM_NAME || 'PromptHub Notifications');
 }
 
 function seedInitialData() {
@@ -150,8 +107,10 @@ function seedInitialData() {
   if (userCount > 0) {
     syncAdminCredentials();
     seedSmtpSettings();
-    const adminUser = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
-    seedLlmProviders(adminUser ? adminUser.id : 'usr_admin');
+    if (process.env.SEED_SAMPLE_MODELS === 'true') {
+      const adminUser = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
+      seedLlmProviders(adminUser ? adminUser.id : 'usr_admin');
+    }
     return;
   }
 

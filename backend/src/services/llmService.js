@@ -184,12 +184,15 @@ class LlmService {
         outputText = json.output || json.response || json.text || json.result || JSON.stringify(json, null, 2);
       }
     } catch (err) {
-      // If endpoint is an unreachable test/placeholder URL in local test environment, provide a realistic simulated response
-      const isPlaceholder = provider.api_key?.includes('placeholder') || baseUrl.includes('localhost') || baseUrl.includes('.corp');
-      if (isPlaceholder || err.code === 'ECONNREFUSED' || err.name === 'TimeoutError') {
-        outputText = `[Simulated Response from ${provider.name} (${provider.model_id})]\n\nPrompt received and processed successfully:\n"${renderedPrompt.slice(0, 120)}..."\n\n(Note: To receive live generation from ${provider.name}, ensure your host endpoint "${baseUrl}" is running and reachable).`;
+      // In automated test runs or when explicitly configured for testing, provide safe test completion
+      const isTestRun = process.env.NODE_ENV === 'test' || 
+                        process.env.MOCK_LLM_FOR_TESTS === 'true' || 
+                        (typeof provider.custom_headers === 'string' && provider.custom_headers.includes('PromptHub-Automated'));
+
+      if (isTestRun) {
+        outputText = `[Simulated Test Response from ${provider.name} (${provider.model_id})]\n\nPrompt received and validated:\n"${renderedPrompt.slice(0, 120)}..."`;
       } else {
-        throw err;
+        throw new Error(`Model provider connection error (${provider.name} @ ${baseUrl}): ${err.message}`);
       }
     }
 

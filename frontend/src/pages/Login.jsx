@@ -4,8 +4,8 @@ import { api } from '../utils/api';
 import { saveAuth } from '../utils/auth';
 
 export default function Login({ onLoginSuccess }) {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -23,11 +23,6 @@ export default function Login({ onLoginSuccess }) {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillQuickAccount = (u, p) => {
-    setUsername(u);
-    setPassword(p);
   };
 
   return (
@@ -123,37 +118,10 @@ export default function Login({ onLoginSuccess }) {
           </button>
         </form>
 
-        {/* Quick-Fill Demo Roles */}
-        <div style={{ marginTop: '28px', paddingTop: '20px', borderTop: '1px solid var(--border-subtle)' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px', textAlign: 'center' }}>
-            Quick-Login Role Switcher
-          </div>
-
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              style={{ flex: 1, fontSize: '0.74rem' }}
-              onClick={() => fillQuickAccount('admin', 'admin123')}
-            >
-              Admin
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              style={{ flex: 1, fontSize: '0.74rem' }}
-              onClick={() => fillQuickAccount('sarah_eng', 'editor123')}
-            >
-              Editor
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              style={{ flex: 1, fontSize: '0.74rem' }}
-              onClick={() => fillQuickAccount('alex_analyst', 'viewer123')}
-            >
-              Viewer
-            </button>
+        <div style={{ marginTop: '28px', paddingTop: '20px', borderTop: '1px solid var(--border-subtle)', textAlign: 'center' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+            <ShieldCheck size={14} style={{ color: '#10b981' }} />
+            <span>PromptHub Self-Hosted Identity Gateway</span>
           </div>
         </div>
       </div>

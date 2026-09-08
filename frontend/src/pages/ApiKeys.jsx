@@ -144,7 +144,7 @@ export default function ApiKeys({ currentUser }) {
           <div className="form-group">
             <label className="form-label">Integration Example</label>
             <pre className="code-block" style={{ fontSize: '0.75rem' }}>
-              {`curl -X GET "http://localhost:8080/api/v1/runtime/prompts/<slug>?env=${createdKeyData?.environment}" \\\n  -H "Authorization: Bearer ${createdKeyData?.rawKey}"`}
+              {`curl -X GET "${typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'http://localhost:8080'}/api/v1/runtime/prompts/<slug>?env=${createdKeyData?.environment}" \\\n  -H "Authorization: Bearer ${createdKeyData?.rawKey}"`}
             </pre>
           </div>
         </div>

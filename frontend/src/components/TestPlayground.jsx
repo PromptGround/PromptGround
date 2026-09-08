@@ -105,12 +105,13 @@ export default function TestPlayground({ prompt, activeVersions = {} }) {
     setTimeout(() => setCopiedState(false), 2000);
   };
 
+  const hostOrigin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'http://localhost:8080';
   const curlExample = executionMode === 'template'
-    ? `curl -X POST "http://localhost:8080/api/v1/runtime/render/${prompt?.slug}?env=${selectedEnv}" \\
+    ? `curl -X POST "${hostOrigin}/api/v1/runtime/render/${prompt?.slug}?env=${selectedEnv}" \\
   -H "Authorization: Bearer ph_live_testkey_abcdef" \\
   -H "Content-Type: application/json" \\
   -d '${JSON.stringify({ variables }, null, 2)}'`
-    : `curl -X POST "http://localhost:8080/api/v1/runtime/execute/${prompt?.slug}?env=${selectedEnv}" \\
+    : `curl -X POST "${hostOrigin}/api/v1/runtime/execute/${prompt?.slug}?env=${selectedEnv}" \\
   -H "Authorization: Bearer ph_live_testkey_abcdef" \\
   -H "Content-Type: application/json" \\
   -d '${JSON.stringify({ variables, modelId: selectedModelId, options: { temperature, maxTokens } }, null, 2)}'`;

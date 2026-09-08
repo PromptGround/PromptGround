@@ -45,9 +45,9 @@ export default function Settings({ currentUser }) {
   const [modelForm, setModelForm] = useState({
     name: '',
     provider_type: 'openai',
-    base_url: 'http://localhost:8000/v1',
+    base_url: '',
     api_key: '',
-    model_id: 'gpt-4o',
+    model_id: '',
     custom_headers: '{}',
     default_params: '{"temperature": 0.7, "max_tokens": 1024}'
   });

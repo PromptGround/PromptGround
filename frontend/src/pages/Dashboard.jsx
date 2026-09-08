@@ -41,7 +41,8 @@ export default function Dashboard({ onNavigate }) {
     return () => clearInterval(interval);
   }, []);
 
-  const curlSnippet = `curl -X GET "http://localhost:8080/api/v1/runtime/prompts/customer-support-copilot?env=production" \\
+  const hostOrigin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'http://localhost:8080';
+  const curlSnippet = `curl -X GET "${hostOrigin}/api/v1/runtime/prompts/customer-support-copilot?env=production" \\
   -H "Authorization: Bearer ph_live_testkey_abcdef"`;
 
   const copyCurl = () => {
