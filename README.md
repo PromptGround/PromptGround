@@ -110,8 +110,8 @@ flowchart TD
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/PromptGround/PromptHub.git
-   cd PromptHub
+   git clone https://github.com/PromptGround/PromptGround.git
+   cd PromptGround
    ```
 
 2. Configure environment variables (optional):
@@ -138,8 +138,8 @@ flowchart TD
 
 1. Clone and install root dependencies:
    ```bash
-   git clone https://github.com/PromptGround/PromptHub.git
-   cd PromptHub
+   git clone https://github.com/PromptGround/PromptGround.git
+   cd PromptGround
    npm run install:all
    ```
 
