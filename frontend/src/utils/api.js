@@ -114,10 +114,10 @@ export const api = {
     });
   },
 
-  executeWithModel: (slug, env, variables, modelId, options = {}) => {
+  executeWithModel: (slug, env, variables, modelId, options = {}, files = []) => {
     return apiRequest(`/runtime/execute/${slug}?env=${env}`, {
       method: 'POST',
-      body: JSON.stringify({ variables, modelId, options })
+      body: JSON.stringify({ variables, modelId, options, files })
     });
   }
 };

@@ -1,68 +1,155 @@
-const http = require('http');
-const https = require('https');
+const DEFAULT_BASE_URLS = {
+  openai: 'https://api.openai.com/v1',
+  gemini: 'https://generativelanguage.googleapis.com/v1beta',
+  anthropic: 'https://api.anthropic.com/v1'
+};
 
 class LlmService {
+  getBaseUrl(provider) {
+    if (provider.base_url && provider.base_url.trim()) {
+      return provider.base_url.trim().replace(/\/+$/, '');
+    }
+    return DEFAULT_BASE_URLS[provider.provider_type] || DEFAULT_BASE_URLS.openai;
+  }
+
   async testConnection(provider) {
     const startTime = Date.now();
     const type = provider.provider_type;
-    const baseUrl = (provider.base_url || '').trim().replace(/\/+$/, '');
+    const baseUrl = this.getBaseUrl(provider);
+    const apiKey = (provider.api_key || '').trim();
+    const customHeaders = this.parseHeaders(provider.custom_headers);
 
     try {
-      if (type === 'ollama') {
-        const testUrl = `${baseUrl}/api/tags`;
-        const res = await fetch(testUrl, { method: 'GET', signal: AbortSignal.timeout(4000) });
-        if (res.ok) {
-          const latencyMs = Date.now() - startTime;
-          return { success: true, latencyMs, message: `Connected to Ollama host (${latencyMs}ms)` };
-        }
-      } else if (type === 'openai') {
+      if (type === 'openai') {
         const testUrl = `${baseUrl}/models`;
         const headers = {
           'Content-Type': 'application/json',
-          ...(provider.api_key ? { 'Authorization': `Bearer ${provider.api_key}` } : {}),
-          ...this.parseHeaders(provider.custom_headers)
+          ...(apiKey ? { 'Authorization': apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}` } : {}),
+          ...customHeaders
         };
-        const res = await fetch(testUrl, { method: 'GET', headers, signal: AbortSignal.timeout(4000) });
-        if (res.ok || res.status === 401 || res.status === 200) {
-          const latencyMs = Date.now() - startTime;
-          return { 
-            success: res.ok, 
-            latencyMs, 
-            message: res.ok ? `OpenAI-compatible endpoint reachable (${latencyMs}ms)` : `Host reachable, but received HTTP ${res.status}`
-          };
+        const res = await fetch(testUrl, { method: 'GET', headers, signal: AbortSignal.timeout(6000) });
+        const latencyMs = Date.now() - startTime;
+        if (res.ok) {
+          return { success: true, latencyMs, message: `OpenAI API connection verified (${latencyMs}ms)` };
+        } else if (res.status === 401) {
+          return { success: false, latencyMs, message: 'Invalid OpenAI API key provided (HTTP 401)' };
+        } else {
+          return { success: res.status < 500, latencyMs, message: `OpenAI endpoint reached with status HTTP ${res.status} (${latencyMs}ms)` };
+        }
+
+      } else if (type === 'gemini') {
+        const testUrl = `${baseUrl}/models?key=${encodeURIComponent(apiKey)}`;
+        const headers = {
+          'Content-Type': 'application/json',
+          ...customHeaders
+        };
+        const res = await fetch(testUrl, { method: 'GET', headers, signal: AbortSignal.timeout(6000) });
+        const latencyMs = Date.now() - startTime;
+        if (res.ok) {
+          return { success: true, latencyMs, message: `Google Gemini API connection verified (${latencyMs}ms)` };
+        } else if (res.status === 400 || res.status === 403) {
+          const errData = await res.json().catch(() => ({}));
+          const errMsg = errData.error?.message || `HTTP ${res.status}`;
+          return { success: false, latencyMs, message: `Google Gemini authentication failed: ${errMsg}` };
+        } else {
+          return { success: res.status < 500, latencyMs, message: `Google Gemini endpoint reachable, HTTP status ${res.status}` };
+        }
+
+      } else if (type === 'anthropic') {
+        // Anthropic messages test endpoint with empty request to check auth
+        const testUrl = `${baseUrl}/messages`;
+        const headers = {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          ...customHeaders
+        };
+        const res = await fetch(testUrl, { 
+          method: 'POST', 
+          headers, 
+          body: JSON.stringify({ model: provider.model_id || 'claude-3-5-sonnet-20241022', max_tokens: 1, messages: [] }),
+          signal: AbortSignal.timeout(6000) 
+        });
+        const latencyMs = Date.now() - startTime;
+        if (res.ok || res.status === 400) {
+          // HTTP 400 means API key is valid (empty messages), but request schema validated
+          return { success: true, latencyMs, message: `Anthropic API connection verified (${latencyMs}ms)` };
+        } else if (res.status === 401) {
+          return { success: false, latencyMs, message: 'Invalid Anthropic API key (HTTP 401 Unauthorized)' };
+        } else {
+          return { success: res.status < 500, latencyMs, message: `Anthropic endpoint reached with status HTTP ${res.status}` };
         }
       }
 
-      // Generic endpoint ping
-      const pingRes = await fetch(baseUrl, { 
-        method: 'GET', 
-        headers: this.parseHeaders(provider.custom_headers),
-        signal: AbortSignal.timeout(3500) 
-      }).catch(() => null);
-
-      const latencyMs = Date.now() - startTime;
-      if (pingRes) {
-        return { success: true, latencyMs, message: `Host reached with HTTP status ${pingRes.status} (${latencyMs}ms)` };
-      }
-
-      return { success: true, latencyMs: 25, message: `Endpoint configuration saved successfully (Local Mock/Sandbox Mode)` };
+      return { success: false, latencyMs: 0, message: `Unsupported provider type '${type}'. Only openai, gemini, and anthropic are supported.` };
     } catch (err) {
-      // In sandbox or isolated network, return helpful diagnostic
       return { 
         success: false, 
         latencyMs: Date.now() - startTime, 
-        message: `Endpoint connection check failed: ${err.message}` 
+        message: `Connection check failed: ${err.message}` 
       };
     }
+  }
+
+  // Parse attached files into normalized objects with base64 and text
+  processFiles(files = []) {
+    if (!Array.isArray(files) || files.length === 0) return [];
+
+    return files.map(file => {
+      let rawBase64 = '';
+      let mimeType = file.type || 'text/plain';
+      let textContent = '';
+
+      if (typeof file.data === 'string') {
+        if (file.data.startsWith('data:')) {
+          const match = file.data.match(/^data:([^;]+);base64,(.*)$/);
+          if (match) {
+            mimeType = match[1] || mimeType;
+            rawBase64 = match[2];
+          } else {
+            rawBase64 = file.data;
+          }
+        } else {
+          rawBase64 = file.data;
+        }
+
+        // Try decoding text for text-based file formats
+        const isTextMime = mimeType.startsWith('text/') || 
+          mimeType === 'application/json' || 
+          mimeType === 'application/javascript' || 
+          mimeType === 'application/xml' ||
+          /\.(txt|md|csv|json|js|ts|py|html|css|yaml|yml|xml|sh)$/i.test(file.name || '');
+
+        if (isTextMime) {
+          try {
+            textContent = Buffer.from(rawBase64, 'base64').toString('utf-8');
+          } catch (e) {
+            textContent = file.data;
+          }
+        }
+      }
+
+      return {
+        name: file.name || 'attachment',
+        type: mimeType,
+        size: file.size || 0,
+        rawBase64,
+        textContent,
+        isImage: mimeType.startsWith('image/'),
+        isPdf: mimeType === 'application/pdf'
+      };
+    });
   }
 
   async executePrompt(provider, renderedPrompt, options = {}) {
     const startTime = process.hrtime.bigint();
     const type = provider.provider_type;
-    const baseUrl = (provider.base_url || '').trim().replace(/\/+$/, '');
+    const baseUrl = this.getBaseUrl(provider);
+    const apiKey = (provider.api_key || '').trim();
     const temperature = options.temperature !== undefined ? options.temperature : 0.7;
     const maxTokens = options.maxTokens || 1024;
     const customHeaders = this.parseHeaders(provider.custom_headers);
+    const files = this.processFiles(options.files || []);
 
     let outputText = '';
     let tokensUsed = null;
@@ -72,119 +159,181 @@ class LlmService {
         const endpoint = baseUrl.endsWith('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
         const headers = {
           'Content-Type': 'application/json',
-          ...(provider.api_key ? { 'Authorization': provider.api_key.startsWith('Bearer ') ? provider.api_key : `Bearer ${provider.api_key}` } : {}),
+          ...(apiKey ? { 'Authorization': apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}` } : {}),
           ...customHeaders
         };
+
+        // Construct message contents
+        let userContent;
+        if (files.length === 0) {
+          userContent = renderedPrompt;
+        } else {
+          userContent = [{ type: 'text', text: renderedPrompt }];
+          for (const file of files) {
+            if (file.isImage && file.rawBase64) {
+              userContent.push({
+                type: 'image_url',
+                image_url: { url: `data:${file.type};base64,${file.rawBase64}` }
+              });
+            } else if (file.textContent) {
+              userContent.push({
+                type: 'text',
+                text: `\n\n[Attached File: ${file.name}]\n\`\`\`\n${file.textContent}\n\`\`\``
+              });
+            } else {
+              userContent.push({
+                type: 'text',
+                text: `\n\n[Attached File: ${file.name} (${file.type}, ${Math.round(file.size / 1024)} KB)]`
+              });
+            }
+          }
+        }
 
         const response = await fetch(endpoint, {
           method: 'POST',
           headers,
           body: JSON.stringify({
             model: provider.model_id,
-            messages: [{ role: 'user', content: renderedPrompt }],
+            messages: [{ role: 'user', content: userContent }],
             temperature,
             max_tokens: maxTokens
           }),
-          signal: AbortSignal.timeout(15000)
+          signal: AbortSignal.timeout(35000)
         });
 
         if (!response.ok) {
           const errBody = await response.text().catch(() => '');
-          throw new Error(`OpenAI API error (${response.status}): ${errBody.slice(0, 300)}`);
+          throw new Error(`OpenAI API error (${response.status}): ${errBody.slice(0, 400)}`);
         }
 
         const json = await response.json();
         outputText = json.choices?.[0]?.message?.content || '';
         tokensUsed = json.usage?.total_tokens || null;
 
-      } else if (type === 'anthropic') {
-        const endpoint = baseUrl.endsWith('/messages') ? baseUrl : `${baseUrl}/v1/messages`;
+      } else if (type === 'gemini') {
+        // Google Gemini API v1beta generateContent
+        const endpoint = `${baseUrl}/models/${provider.model_id}:generateContent?key=${encodeURIComponent(apiKey)}`;
         const headers = {
           'Content-Type': 'application/json',
-          'x-api-key': provider.api_key,
+          ...customHeaders
+        };
+
+        const parts = [{ text: renderedPrompt }];
+
+        for (const file of files) {
+          if ((file.isImage || file.isPdf) && file.rawBase64) {
+            parts.push({
+              inlineData: {
+                mimeType: file.type,
+                data: file.rawBase64
+              }
+            });
+          } else if (file.textContent) {
+            parts.push({
+              text: `\n\n[Attached File: ${file.name}]\n\`\`\`\n${file.textContent}\n\`\`\``
+            });
+          } else if (file.rawBase64) {
+            parts.push({
+              inlineData: {
+                mimeType: file.type,
+                data: file.rawBase64
+              }
+            });
+          }
+        }
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            contents: [
+              {
+                role: 'user',
+                parts
+              }
+            ],
+            generationConfig: {
+              temperature,
+              maxOutputTokens: maxTokens
+            }
+          }),
+          signal: AbortSignal.timeout(35000)
+        });
+
+        if (!response.ok) {
+          const errBody = await response.text().catch(() => '');
+          throw new Error(`Google Gemini API error (${response.status}): ${errBody.slice(0, 400)}`);
+        }
+
+        const json = await response.json();
+        const candidateParts = json.candidates?.[0]?.content?.parts || [];
+        outputText = candidateParts.map(p => p.text || '').join('\n') || '';
+        tokensUsed = json.usageMetadata?.totalTokenCount || null;
+
+      } else if (type === 'anthropic') {
+        const endpoint = baseUrl.endsWith('/messages') ? baseUrl : `${baseUrl}/messages`;
+        const headers = {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
           'anthropic-version': '2023-06-01',
           ...customHeaders
         };
 
+        const contentParts = [{ type: 'text', text: renderedPrompt }];
+
+        for (const file of files) {
+          if (file.isImage && file.rawBase64) {
+            contentParts.push({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: file.type,
+                data: file.rawBase64
+              }
+            });
+          } else if (file.isPdf && file.rawBase64) {
+            contentParts.push({
+              type: 'document',
+              source: {
+                type: 'base64',
+                media_type: 'application/pdf',
+                data: file.rawBase64
+              }
+            });
+          } else if (file.textContent) {
+            contentParts.push({
+              type: 'text',
+              text: `\n\n[Attached File: ${file.name}]\n\`\`\`\n${file.textContent}\n\`\`\``
+            });
+          }
+        }
+
         const response = await fetch(endpoint, {
           method: 'POST',
           headers,
           body: JSON.stringify({
             model: provider.model_id,
-            messages: [{ role: 'user', content: renderedPrompt }],
+            messages: [{ role: 'user', content: contentParts }],
             max_tokens: maxTokens,
             temperature
           }),
-          signal: AbortSignal.timeout(15000)
+          signal: AbortSignal.timeout(35000)
         });
 
         if (!response.ok) {
           const errBody = await response.text().catch(() => '');
-          throw new Error(`Anthropic API error (${response.status}): ${errBody.slice(0, 300)}`);
+          throw new Error(`Anthropic API error (${response.status}): ${errBody.slice(0, 400)}`);
         }
 
         const json = await response.json();
-        outputText = json.content?.[0]?.text || '';
+        outputText = (json.content || []).map(c => c.text || '').join('\n') || '';
         tokensUsed = (json.usage?.input_tokens || 0) + (json.usage?.output_tokens || 0);
 
-      } else if (type === 'ollama') {
-        const endpoint = baseUrl.endsWith('/api/generate') ? baseUrl : `${baseUrl}/api/generate`;
-        const headers = {
-          'Content-Type': 'application/json',
-          ...customHeaders
-        };
-
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            model: provider.model_id,
-            prompt: renderedPrompt,
-            stream: false,
-            options: { temperature }
-          }),
-          signal: AbortSignal.timeout(20000)
-        });
-
-        if (!response.ok) {
-          const errBody = await response.text().catch(() => '');
-          throw new Error(`Ollama error (${response.status}): ${errBody.slice(0, 300)}`);
-        }
-
-        const json = await response.json();
-        outputText = json.response || '';
-        tokensUsed = json.eval_count || null;
-
       } else {
-        // Custom HTTP REST Endpoint
-        const headers = {
-          'Content-Type': 'application/json',
-          ...(provider.api_key ? { 'Authorization': provider.api_key } : {}),
-          ...customHeaders
-        };
-
-        const response = await fetch(baseUrl, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            prompt: renderedPrompt,
-            model: provider.model_id,
-            temperature,
-            max_tokens: maxTokens
-          }),
-          signal: AbortSignal.timeout(15000)
-        });
-
-        if (!response.ok) {
-          const errBody = await response.text().catch(() => '');
-          throw new Error(`Custom endpoint error (${response.status}): ${errBody.slice(0, 300)}`);
-        }
-
-        const json = await response.json();
-        outputText = json.output || json.response || json.text || json.result || JSON.stringify(json, null, 2);
+        throw new Error(`Unsupported model provider type '${type}'. Only openai, gemini, and anthropic are supported.`);
       }
     } catch (err) {
-      // In automated test runs or when explicitly configured for testing, provide safe test completion
+      // In automated tests or mock mode, return helpful simulated response
       const isTestRun = process.env.NODE_ENV === 'test' || 
                         process.env.MOCK_LLM_FOR_TESTS === 'true' || 
                         (typeof provider.custom_headers === 'string' && (
@@ -193,9 +342,10 @@ class LlmService {
                         ));
 
       if (isTestRun) {
-        outputText = `[Simulated Test Response from ${provider.name} (${provider.model_id})]\n\nPrompt received and validated:\n"${renderedPrompt.slice(0, 120)}..."`;
+        const fileNames = files.map(f => f.name).join(', ');
+        outputText = `[Simulated Test Response from ${provider.name} (${provider.model_id})]\n\nPrompt: "${renderedPrompt.slice(0, 120)}..."\n${fileNames ? `Attached files: ${fileNames}` : 'No files attached'}`;
       } else {
-        throw new Error(`Model provider connection error (${provider.name} @ ${baseUrl}): ${err.message}`);
+        throw new Error(`Model execution error (${provider.name} / ${provider.model_id}): ${err.message}`);
       }
     }
 
@@ -209,7 +359,8 @@ class LlmService {
       providerType: provider.provider_type,
       output: outputText,
       latencyMs: Number(durationMs.toFixed(2)),
-      tokensUsed
+      tokensUsed,
+      attachedFilesCount: files.length
     };
   }
 
@@ -224,3 +375,4 @@ class LlmService {
 }
 
 module.exports = new LlmService();
+

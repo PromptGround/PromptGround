@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Play, 
   Copy, 
@@ -8,7 +8,12 @@ import {
   Clock, 
   Cpu, 
   Sliders, 
-  MessageSquare 
+  MessageSquare,
+  Paperclip,
+  Upload,
+  X,
+  FileText,
+  Image as ImageIcon
 } from 'lucide-react';
 import { api } from '../utils/api';
 import EnvironmentBadge from './EnvironmentBadge';
@@ -23,6 +28,10 @@ export default function TestPlayground({ prompt, activeVersions = {} }) {
   const [selectedModelId, setSelectedModelId] = useState('');
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(1024);
+
+  // File attachments state
+  const [attachedFiles, setAttachedFiles] = useState([]);
+  const fileInputRef = useRef(null);
 
   const [renderResult, setRenderResult] = useState(null);
   const [modelResult, setModelResult] = useState(null);
@@ -67,6 +76,52 @@ export default function TestPlayground({ prompt, activeVersions = {} }) {
     setVariables(prev => ({ ...prev, [key]: value }));
   };
 
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    files.forEach(file => {
+      if (file.size > 10 * 1024 * 1024) {
+        alert(`File "${file.name}" exceeds the 10MB limit.`);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setAttachedFiles(prev => [
+          ...prev,
+          {
+            id: Math.random().toString(36).substring(2, 9),
+            name: file.name,
+            type: file.type || 'application/octet-stream',
+            size: file.size,
+            data: event.target.result
+          }
+        ]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const removeFile = (id) => {
+    setAttachedFiles(prev => prev.filter(f => f.id !== id));
+  };
+
+  const clearAllFiles = () => {
+    setAttachedFiles([]);
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) return '0 B';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   const handleExecute = async () => {
     if (!prompt) return;
     setLoading(true);
@@ -78,14 +133,21 @@ export default function TestPlayground({ prompt, activeVersions = {} }) {
         setRenderResult(data);
         setModelResult(null);
       } else {
-        // Execute with Connected LLM Model
+        // Execute with Connected LLM Model & Attached Files
         if (!selectedModelId) {
           throw new Error('Please select a connected LLM model or add one in Settings');
         }
-        const data = await api.executeWithModel(prompt.slug, selectedEnv, variables, selectedModelId, {
-          temperature: parseFloat(temperature),
-          maxTokens: parseInt(maxTokens, 10)
-        });
+        const data = await api.executeWithModel(
+          prompt.slug, 
+          selectedEnv, 
+          variables, 
+          selectedModelId, 
+          {
+            temperature: parseFloat(temperature),
+            maxTokens: parseInt(maxTokens, 10)
+          },
+          attachedFiles
+        );
         setModelResult(data);
         setRenderResult(null);
       }
@@ -114,7 +176,7 @@ export default function TestPlayground({ prompt, activeVersions = {} }) {
     : `curl -X POST "${hostOrigin}/api/v1/runtime/execute/${prompt?.slug}?env=${selectedEnv}" \\
   -H "Authorization: Bearer ph_live_testkey_abcdef" \\
   -H "Content-Type: application/json" \\
-  -d '${JSON.stringify({ variables, modelId: selectedModelId, options: { temperature, maxTokens } }, null, 2)}'`;
+  -d '${JSON.stringify({ variables, modelId: selectedModelId, options: { temperature, maxTokens }, files: attachedFiles.map(f => ({ name: f.name, type: f.type, size: f.size })) }, null, 2)}'`;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -277,6 +339,118 @@ export default function TestPlayground({ prompt, activeVersions = {} }) {
               </div>
             )}
 
+            {/* File Attachments Card */}
+            <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: 0, fontWeight: 600 }}>
+                  <Paperclip size={15} style={{ color: 'var(--accent-primary)' }} />
+                  Attach Files with Prompt
+                  {attachedFiles.length > 0 && (
+                    <span style={{ fontSize: '0.72rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 700, marginLeft: '4px' }}>
+                      {attachedFiles.length}
+                    </span>
+                  )}
+                </label>
+                {attachedFiles.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={clearAllFiles}
+                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.75rem', cursor: 'pointer' }}
+                  >
+                    Clear All
+                  </button>
+                )}
+              </div>
+
+              <input
+                type="file"
+                multiple
+                ref={fileInputRef}
+                onChange={handleFileSelect}
+                style={{ display: 'none' }}
+              />
+
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    handleFileSelect({ target: { files: e.dataTransfer.files } });
+                  }
+                }}
+                style={{
+                  border: '1px dashed var(--border-subtle)',
+                  borderRadius: '8px',
+                  padding: '14px 12px',
+                  textAlign: 'center',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Upload size={18} style={{ color: 'var(--accent-primary)', marginBottom: '4px' }} />
+                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  Click or drag files here to attach
+                </div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Images, PDFs, Code, Markdown, CSV, Text (up to 10MB)
+                </div>
+              </div>
+
+              {attachedFiles.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
+                  {attachedFiles.map((file) => (
+                    <div
+                      key={file.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 10px',
+                        background: 'rgba(0, 0, 0, 0.25)',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-subtle)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                        {file.type.startsWith('image/') ? (
+                          <ImageIcon size={14} style={{ color: '#38bdf8', flexShrink: 0 }} />
+                        ) : (
+                          <FileText size={14} style={{ color: file.type === 'application/pdf' ? '#f87171' : '#a5b4fc', flexShrink: 0 }} />
+                        )}
+                        <span style={{ fontSize: '0.78rem', color: '#f8fafc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {file.name}
+                        </span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+                          ({formatFileSize(file.size)})
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => removeFile(file.id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                          padding: '2px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                        title="Remove file"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div style={{ marginTop: '20px' }}>
               <button
                 onClick={handleExecute}
@@ -320,7 +494,12 @@ export default function TestPlayground({ prompt, activeVersions = {} }) {
 
             {/* Performance telemetry pill */}
             {modelResult && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {modelResult.attachedFilesCount > 0 && (
+                  <span style={{ fontSize: '0.74rem', padding: '2px 8px', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Paperclip size={12} /> {modelResult.attachedFilesCount} {modelResult.attachedFilesCount === 1 ? 'file' : 'files'}
+                  </span>
+                )}
                 <span style={{ fontSize: '0.74rem', padding: '2px 8px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', fontWeight: 700 }}>
                   {modelResult.providerName}
                 </span>

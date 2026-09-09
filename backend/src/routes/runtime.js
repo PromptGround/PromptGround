@@ -93,7 +93,7 @@ router.post(
     const { slug } = req.params;
     const environment = req.targetEnvironment;
     const inputVariables = req.body.variables || {};
-    const { modelId, options = {} } = req.body;
+    const { modelId, options = {}, files = [] } = req.body;
 
     if (!modelId) {
       return res.status(400).json({ error: 'modelId is required to execute prompt' });
@@ -112,10 +112,11 @@ router.post(
       return res.status(404).json({ error: 'Selected LLM model provider not found' });
     }
 
-    // 3. Execute prompt against model
+    // 3. Execute prompt against model with optional file attachments
     const llmService = require('../services/llmService');
     try {
-      const execResult = await llmService.executePrompt(provider, rendered.rendered, options);
+      const mergedFiles = Array.isArray(files) && files.length > 0 ? files : (options.files || []);
+      const execResult = await llmService.executePrompt(provider, rendered.rendered, { ...options, files: mergedFiles });
 
       res.json({
         promptId: rendered.promptId,
@@ -128,6 +129,7 @@ router.post(
         tokensUsed: execResult.tokensUsed,
         providerName: execResult.providerName,
         modelId: execResult.modelId,
+        attachedFilesCount: execResult.attachedFilesCount || 0,
         cacheLookupMicroseconds: rendered.durationMicroseconds,
         cacheHit: true
       });

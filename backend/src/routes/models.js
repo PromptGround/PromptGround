@@ -43,6 +43,18 @@ router.get('/', (req, res) => {
   res.json({ models: formatted });
 });
 
+const DEFAULT_BASE_URLS = {
+  openai: 'https://api.openai.com/v1',
+  gemini: 'https://generativelanguage.googleapis.com/v1beta',
+  anthropic: 'https://api.anthropic.com/v1'
+};
+
+const PROVIDER_NAMES = {
+  openai: 'OpenAI',
+  gemini: 'Google Gemini',
+  anthropic: 'Anthropic'
+};
+
 // POST /api/v1/models - Register new model connection (Admin only)
 router.post('/', requireRole(['admin']), (req, res) => {
   const { 
@@ -55,13 +67,19 @@ router.post('/', requireRole(['admin']), (req, res) => {
     default_params = {} 
   } = req.body;
 
-  if (!name || !provider_type || !base_url || !model_id) {
-    return res.status(400).json({ error: 'name, provider_type, base_url, and model_id are required' });
+  if (!provider_type || !model_id) {
+    return res.status(400).json({ error: 'provider_type and model_id are required' });
   }
 
-  if (!['openai', 'anthropic', 'gemini', 'ollama', 'custom'].includes(provider_type)) {
-    return res.status(400).json({ error: 'Invalid provider_type. Must be openai, anthropic, gemini, ollama, or custom' });
+  if (!['openai', 'gemini', 'anthropic'].includes(provider_type)) {
+    return res.status(400).json({ error: 'Invalid provider_type. Supported providers are strictly: openai, gemini, and anthropic' });
   }
+
+  // Auto-generate standard API endpoint if not provided
+  const finalBaseUrl = (base_url && base_url.trim()) ? base_url.trim() : DEFAULT_BASE_URLS[provider_type];
+
+  // Auto-generate clean display name if not provided
+  const finalName = (name && name.trim()) ? name.trim() : `${PROVIDER_NAMES[provider_type]} - ${model_id.trim()}`;
 
   const id = 'mod_' + uuidv4().slice(0, 8);
 
@@ -74,9 +92,9 @@ router.post('/', requireRole(['admin']), (req, res) => {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
   `).run(
     id,
-    name.trim(),
+    finalName,
     provider_type,
-    base_url.trim(),
+    finalBaseUrl,
     api_key.trim(),
     model_id.trim(),
     headersJson,
@@ -87,7 +105,9 @@ router.post('/', requireRole(['admin']), (req, res) => {
   res.status(201).json({
     message: 'Model connection registered successfully',
     modelId: id,
-    name
+    name: finalName,
+    provider_type,
+    base_url: finalBaseUrl
   });
 });
 
@@ -109,12 +129,17 @@ router.put('/:id', requireRole(['admin']), (req, res) => {
     return res.status(404).json({ error: 'Model connection not found' });
   }
 
-  const updatedName = name !== undefined ? name.trim() : existing.name;
   const updatedType = provider_type !== undefined ? provider_type : existing.provider_type;
-  const updatedUrl = base_url !== undefined ? base_url.trim() : existing.base_url;
+  if (!['openai', 'gemini', 'anthropic'].includes(updatedType)) {
+    return res.status(400).json({ error: 'Invalid provider_type. Supported providers are strictly: openai, gemini, and anthropic' });
+  }
+
+  const updatedModelId = model_id !== undefined ? model_id.trim() : existing.model_id;
+  const updatedUrl = (base_url !== undefined && base_url.trim()) ? base_url.trim() : (existing.base_url || DEFAULT_BASE_URLS[updatedType]);
+  const updatedName = (name !== undefined && name.trim()) ? name.trim() : (existing.name || `${PROVIDER_NAMES[updatedType]} - ${updatedModelId}`);
+
   // If api_key is empty string or omitted in edit, preserve existing key
   const updatedKey = (api_key !== undefined && api_key !== '') ? api_key.trim() : existing.api_key;
-  const updatedModelId = model_id !== undefined ? model_id.trim() : existing.model_id;
   const updatedHeaders = custom_headers !== undefined ? (typeof custom_headers === 'string' ? custom_headers : JSON.stringify(custom_headers)) : existing.custom_headers;
   const updatedParams = default_params !== undefined ? (typeof default_params === 'string' ? default_params : JSON.stringify(default_params)) : existing.default_params;
 
@@ -150,9 +175,17 @@ router.delete('/:id', requireRole(['admin']), (req, res) => {
 
 // POST /api/v1/models/test-direct - Test connection before saving or test existing
 router.post('/test-direct', requireRole(['admin']), async (req, res) => {
-  const provider = req.body;
-  if (!provider.base_url || !provider.provider_type) {
-    return res.status(400).json({ error: 'base_url and provider_type are required' });
+  const provider = { ...req.body };
+  if (!provider.provider_type) {
+    return res.status(400).json({ error: 'provider_type is required' });
+  }
+
+  if (!['openai', 'gemini', 'anthropic'].includes(provider.provider_type)) {
+    return res.status(400).json({ error: 'Only openai, gemini, and anthropic are supported' });
+  }
+
+  if (!provider.base_url) {
+    provider.base_url = DEFAULT_BASE_URLS[provider.provider_type];
   }
 
   try {

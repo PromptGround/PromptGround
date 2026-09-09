@@ -100,13 +100,40 @@ export default function Settings({ currentUser }) {
     }
   }, [isAdmin]);
 
+const PROVIDER_PRESETS = {
+  openai: {
+    name: 'OpenAI',
+    defaultUrl: 'https://api.openai.com/v1',
+    models: ['gpt-4o', 'gpt-4o-mini', 'o1', 'o1-mini', 'o3-mini', 'gpt-4-turbo'],
+    keyPlaceholder: 'sk-proj-... (OpenAI API Key)',
+    badgeBg: 'rgba(16, 185, 129, 0.15)',
+    badgeColor: '#34d399'
+  },
+  gemini: {
+    name: 'Google Gemini',
+    defaultUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    models: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-8b'],
+    keyPlaceholder: 'AIzaSy... (Google AI Studio Gemini API Key)',
+    badgeBg: 'rgba(56, 189, 248, 0.15)',
+    badgeColor: '#38bdf8'
+  },
+  anthropic: {
+    name: 'Anthropic',
+    defaultUrl: 'https://api.anthropic.com/v1',
+    models: ['claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229'],
+    keyPlaceholder: 'sk-ant-... (Anthropic API Key)',
+    badgeBg: 'rgba(245, 158, 11, 0.15)',
+    badgeColor: '#fbbf24'
+  }
+};
+
   // Model Handlers
   const handleOpenNewModel = () => {
     setEditingModelId(null);
     setModelForm({
       name: '',
       provider_type: 'openai',
-      base_url: 'https://api.openai.com/v1',
+      base_url: PROVIDER_PRESETS.openai.defaultUrl,
       api_key: '',
       model_id: 'gpt-4o',
       custom_headers: '{}',
@@ -117,11 +144,12 @@ export default function Settings({ currentUser }) {
   };
 
   const handleEditModel = (m) => {
+    const pType = ['openai', 'gemini', 'anthropic'].includes(m.provider_type) ? m.provider_type : 'openai';
     setEditingModelId(m.id);
     setModelForm({
       name: m.name,
-      provider_type: m.provider_type,
-      base_url: m.base_url,
+      provider_type: pType,
+      base_url: m.base_url || PROVIDER_PRESETS[pType].defaultUrl,
       api_key: '', // leave empty unless changing
       model_id: m.model_id,
       custom_headers: JSON.stringify(m.customHeaders || {}, null, 2),
@@ -135,9 +163,10 @@ export default function Settings({ currentUser }) {
     setModelTesting(true);
     setModelTestResult(null);
     try {
+      const preset = PROVIDER_PRESETS[modelForm.provider_type] || PROVIDER_PRESETS.openai;
       const res = await api.testModelDirect({
         provider_type: modelForm.provider_type,
-        base_url: modelForm.base_url,
+        base_url: preset.defaultUrl,
         api_key: modelForm.api_key,
         model_id: modelForm.model_id,
         custom_headers: modelForm.custom_headers
@@ -156,19 +185,23 @@ export default function Settings({ currentUser }) {
     try {
       let custom_headers = {};
       let default_params = {};
-      try { custom_headers = JSON.parse(modelForm.custom_headers); } catch (e) {}
-      try { default_params = JSON.parse(modelForm.default_params); } catch (e) {}
+      try { custom_headers = JSON.parse(modelForm.custom_headers || '{}'); } catch (e) {}
+      try { default_params = JSON.parse(modelForm.default_params || '{}'); } catch (e) {}
+
+      const preset = PROVIDER_PRESETS[modelForm.provider_type] || PROVIDER_PRESETS.openai;
+      const modelId = (modelForm.model_id || 'gpt-4o').trim();
+      const autoName = (modelForm.name && modelForm.name.trim()) ? modelForm.name.trim() : `${preset.name} - ${modelId}`;
 
       const payload = {
-        name: modelForm.name,
+        name: autoName,
         provider_type: modelForm.provider_type,
-        base_url: modelForm.base_url,
-        model_id: modelForm.model_id,
+        base_url: preset.defaultUrl,
+        model_id: modelId,
         custom_headers,
         default_params
       };
       if (modelForm.api_key) {
-        payload.api_key = modelForm.api_key;
+        payload.api_key = modelForm.api_key.trim();
       }
 
       if (editingModelId) {
@@ -448,63 +481,70 @@ export default function Settings({ currentUser }) {
               <thead>
                 <tr>
                   <th>Model Display Name</th>
-                  <th>Provider Type</th>
+                  <th>Provider</th>
                   <th>Model Identifier</th>
-                  <th>Target Base URL</th>
+                  <th>Backend API Endpoint</th>
                   <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {models.map(m => (
-                  <tr key={m.id}>
-                    <td>
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{m.name}</div>
-                    </td>
-                    <td>
-                      <span style={{ 
-                        fontSize: '0.72rem', 
-                        textTransform: 'uppercase', 
-                        padding: '2px 8px', 
-                        borderRadius: '4px',
-                        background: m.provider_type === 'ollama' ? 'rgba(6, 182, 212, 0.15)' : 'rgba(99, 102, 241, 0.15)',
-                        color: m.provider_type === 'ollama' ? '#38bdf8' : '#a5b4fc',
-                        fontWeight: 700
-                      }}>
-                        {m.provider_type}
-                      </span>
-                    </td>
-                    <td>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: '#f8fafc' }}>
-                        {m.model_id}
-                      </span>
-                    </td>
-                    <td>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                        {m.base_url}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          style={{ padding: '4px 8px' }}
-                          onClick={() => handleEditModel(m)}
-                          title="Edit model connection"
-                        >
-                          <Edit3 size={13} />
-                        </button>
-                        <button
-                          className="btn btn-danger btn-sm"
-                          style={{ padding: '4px 8px' }}
-                          onClick={() => handleDeleteModel(m.id, m.name)}
-                          title="Delete model connection"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {models.map(m => {
+                  const preset = PROVIDER_PRESETS[m.provider_type] || {
+                    name: m.provider_type,
+                    badgeBg: 'rgba(99, 102, 241, 0.15)',
+                    badgeColor: '#a5b4fc'
+                  };
+                  return (
+                    <tr key={m.id}>
+                      <td>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{m.name}</div>
+                      </td>
+                      <td>
+                        <span style={{ 
+                          fontSize: '0.72rem', 
+                          textTransform: 'uppercase', 
+                          padding: '2px 8px', 
+                          borderRadius: '4px',
+                          background: preset.badgeBg,
+                          color: preset.badgeColor,
+                          fontWeight: 700
+                        }}>
+                          {preset.name}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: '#f8fafc' }}>
+                          {m.model_id}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                          {m.base_url}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '4px 8px' }}
+                            onClick={() => handleEditModel(m)}
+                            title="Edit model connection"
+                          >
+                            <Edit3 size={13} />
+                          </button>
+                          <button
+                            className="btn btn-danger btn-sm"
+                            style={{ padding: '4px 8px' }}
+                            onClick={() => handleDeleteModel(m.id, m.name)}
+                            title="Delete model connection"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -807,45 +847,84 @@ export default function Settings({ currentUser }) {
       >
         <form onSubmit={handleSaveModel}>
           <div className="modal-body">
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px' }}>
-              <div className="form-group">
-                <label className="form-label">Model Display Name</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  required
-                  placeholder="e.g. Local Ollama or Claude Sonnet"
-                  value={modelForm.name}
-                  onChange={(e) => setModelForm({ ...modelForm, name: e.target.value })}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Provider Type</label>
-                <select
-                  className="form-select"
-                  value={modelForm.provider_type}
-                  onChange={(e) => setModelForm({ ...modelForm, provider_type: e.target.value })}
-                >
-                  <option value="openai">OpenAI / OpenAI-compatible (vLLM, Groq, DeepSeek)</option>
-                  <option value="anthropic">Anthropic (Claude API)</option>
-                  <option value="ollama">Ollama (Local / Self-hosted)</option>
-                  <option value="custom">Custom HTTP REST API (Any format)</option>
-                </select>
+            {/* Provider Selection */}
+            <div className="form-group">
+              <label className="form-label" style={{ fontWeight: 600 }}>Select AI Provider</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginTop: '6px' }}>
+                {Object.entries(PROVIDER_PRESETS).map(([key, p]) => {
+                  const isSelected = modelForm.provider_type === key;
+                  return (
+                    <div
+                      key={key}
+                      onClick={() => {
+                        setModelForm({
+                          ...modelForm,
+                          provider_type: key,
+                          base_url: p.defaultUrl,
+                          model_id: p.models[0]
+                        });
+                        setModelTestResult(null);
+                      }}
+                      style={{
+                        padding: '12px',
+                        borderRadius: '8px',
+                        border: isSelected ? `2px solid ${p.badgeColor}` : '1px solid var(--border-subtle)',
+                        background: isSelected ? p.badgeBg : 'var(--bg-card)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        textAlign: 'center'
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem', color: isSelected ? p.badgeColor : 'var(--text-primary)' }}>
+                        {p.name}
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                        Auto-routed API
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '16px' }}>
+            {/* Auto-generated Backend Endpoint Banner */}
+            <div style={{
+              padding: '10px 14px',
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: '1px dashed var(--border-subtle)',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '0.8rem',
+              color: 'var(--text-secondary)'
+            }}>
+              <span>
+                Backend API Endpoint (Auto-configured):
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', color: '#38bdf8', fontWeight: 600 }}>
+                {PROVIDER_PRESETS[modelForm.provider_type]?.defaultUrl}
+              </span>
+            </div>
+
+            {/* Model Selection */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px' }}>
               <div className="form-group">
-                <label className="form-label">Endpoint Base URL</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  required
-                  placeholder="http://localhost:11434 or https://api.openai.com/v1"
-                  value={modelForm.base_url}
-                  onChange={(e) => setModelForm({ ...modelForm, base_url: e.target.value })}
-                />
+                <label className="form-label">Model Preset Quick Pick</label>
+                <select
+                  className="form-select"
+                  value={PROVIDER_PRESETS[modelForm.provider_type]?.models.includes(modelForm.model_id) ? modelForm.model_id : '__custom__'}
+                  onChange={(e) => {
+                    if (e.target.value !== '__custom__') {
+                      setModelForm({ ...modelForm, model_id: e.target.value });
+                    }
+                  }}
+                >
+                  {PROVIDER_PRESETS[modelForm.provider_type]?.models.map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                  <option value="__custom__">Custom Model ID...</option>
+                </select>
               </div>
 
               <div className="form-group">
@@ -854,31 +933,52 @@ export default function Settings({ currentUser }) {
                   type="text"
                   className="form-input"
                   required
-                  placeholder="e.g. llama3.2, gpt-4o, claude-3-5-sonnet"
+                  placeholder="e.g. gpt-4o, gemini-1.5-flash"
                   value={modelForm.model_id}
                   onChange={(e) => setModelForm({ ...modelForm, model_id: e.target.value })}
                 />
               </div>
             </div>
 
+            {/* API Key */}
             <div className="form-group">
-              <label className="form-label">API Key / Auth Token (Optional for local Ollama)</label>
+              <label className="form-label">
+                API Key {editingModelId ? '(Leave blank to preserve stored key)' : '(Required)'}
+              </label>
               <input
                 type="password"
                 className="form-input"
-                placeholder={editingModelId ? 'Leave blank to preserve stored secret' : 'sk-... or custom auth token'}
+                required={!editingModelId}
+                placeholder={PROVIDER_PRESETS[modelForm.provider_type]?.keyPlaceholder || 'Enter API Key'}
                 value={modelForm.api_key}
                 onChange={(e) => setModelForm({ ...modelForm, api_key: e.target.value })}
               />
             </div>
 
+            {/* Model Display Name (Optional) */}
             <div className="form-group">
-              <label className="form-label">Custom HTTP Request Headers (JSON)</label>
+              <label className="form-label">
+                Model Display Name <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Optional - auto-generates if empty)</span>
+              </label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder={`e.g. ${PROVIDER_PRESETS[modelForm.provider_type]?.name} - ${modelForm.model_id || 'Model'}`}
+                value={modelForm.name}
+                onChange={(e) => setModelForm({ ...modelForm, name: e.target.value })}
+              />
+            </div>
+
+            {/* Custom Headers */}
+            <div className="form-group">
+              <label className="form-label">
+                Custom HTTP Request Headers <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Optional JSON)</span>
+              </label>
               <textarea
                 className="form-textarea"
-                rows={3}
-                style={{ minHeight: '70px', fontSize: '0.8rem' }}
-                placeholder='{"X-Tenant-ID": "corp-dev", "Authorization": "CustomToken"}'
+                rows={2}
+                style={{ minHeight: '55px', fontSize: '0.8rem' }}
+                placeholder='{"X-Custom-Header": "value"}'
                 value={modelForm.custom_headers}
                 onChange={(e) => setModelForm({ ...modelForm, custom_headers: e.target.value })}
               />
@@ -902,7 +1002,7 @@ export default function Settings({ currentUser }) {
             <button
               type="button"
               className="btn btn-secondary btn-sm"
-              disabled={modelTesting || !modelForm.base_url}
+              disabled={modelTesting || !modelForm.model_id || (!editingModelId && !modelForm.api_key)}
               onClick={handleTestModelConnection}
             >
               <Activity size={13} />
@@ -920,7 +1020,7 @@ export default function Settings({ currentUser }) {
               <button
                 type="submit"
                 className="btn btn-primary btn-sm"
-                disabled={modelSubmitting || !modelForm.name || !modelForm.base_url || !modelForm.model_id}
+                disabled={modelSubmitting || !modelForm.model_id || (!editingModelId && !modelForm.api_key)}
               >
                 {modelSubmitting ? 'Saving...' : 'Save Model'}
               </button>
